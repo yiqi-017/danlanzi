@@ -5,6 +5,9 @@ const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const { sequelize } = require('./models');
+const emailRoutes = require('./routes/email');
+const verificationRoutes = require('./routes/verification');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,10 +24,13 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // 路由
+app.use('/api/email', emailRoutes);
+app.use('/api/verification', verificationRoutes);
+app.use('/api/auth', authRoutes);
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    message: '旦篮子后端服务运行正常',
+    message: 'Danlanzi backend service is running normally',
     timestamp: new Date().toISOString(),
     version: '1.0.0'
   });
@@ -35,13 +41,13 @@ app.get('/db-test', async (req, res) => {
     await sequelize.authenticate();
     res.json({
       status: 'success',
-      message: '数据库连接成功',
+      message: 'Database connection successful',
       database: sequelize.getDatabaseName()
     });
   } catch (error) {
     res.status(500).json({
       status: 'error',
-      message: '数据库连接失败',
+      message: 'Database connection failed',
       error: error.message
     });
   }
@@ -54,14 +60,14 @@ app.get('/tables', async (req, res) => {
     
     res.json({
       status: 'success',
-      message: '获取表信息成功',
+      message: 'Table information retrieved successfully',
       tables: tables,
       count: tables.length
     });
   } catch (error) {
     res.status(500).json({
       status: 'error',
-      message: '获取表信息失败',
+      message: 'Failed to retrieve table information',
       error: error.message
     });
   }
@@ -71,7 +77,7 @@ app.get('/tables', async (req, res) => {
 app.use('*', (req, res) => {
   res.status(404).json({
     status: 'error',
-    message: '接口不存在',
+    message: 'API endpoint not found',
     path: req.originalUrl
   });
 });
@@ -80,7 +86,7 @@ app.use((error, req, res, next) => {
   console.error('服务器错误:', error);
   res.status(500).json({
     status: 'error',
-    message: '服务器内部错误',
+    message: 'Internal server error',
     error: process.env.NODE_ENV === 'development' ? error.message : '请稍后重试'
   });
 });

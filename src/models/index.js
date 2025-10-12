@@ -17,6 +17,7 @@ const UserAnnouncementRead = require('./UserAnnouncementRead');
 const Report = require('./Report');
 const ModerationQueue = require('./ModerationQueue');
 const File = require('./File');
+const VerificationCode = require('./VerificationCode');
 
 // 用户关联
 User.hasMany(Enrollment, { foreignKey: 'user_id', as: 'enrollments' });
@@ -102,5 +103,6 @@ module.exports = {
   UserAnnouncementRead,
   Report,
   ModerationQueue,
-  File
+  File,
+  VerificationCode
 };

@@ -48,6 +48,10 @@ JWT_EXPIRES_IN=7d
 # 服务器配置
 PORT=3000
 NODE_ENV=development
+
+# 邮箱配置
+EMAIL_USER=your gmail address
+EMAIL_PASS=your gmail password
 ```
 
 ### 4. 数据库初始化
