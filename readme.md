@@ -119,6 +119,10 @@ dlz-backend/
 │   │   ├── Course.js
 │   │   ├── Resource.js
 │   │   └── ...
+│   ├── routes/            # 接口放在这里
+│   │   ├── auth.js
+│   │   ├── email.js
+│   │   └── ...
 │   ├── migrations/        # 数据库迁移文件
 │   ├── config/            # sequelize CLI配置
 │   └── app.js             # 应用入口
