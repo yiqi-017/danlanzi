@@ -10,6 +10,18 @@ router.post('/register', async (req, res) => {
   try {
     const { nickname, email, password, verificationCode } = req.body;
 
+    // 检查邮箱是否已注册
+    const existingUser = await User.findOne({
+      where: { email: email }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Email already registered'
+      });
+    }
+
     // 加密密码
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(password, saltRounds);
@@ -53,6 +65,15 @@ router.post('/register', async (req, res) => {
 
   } catch (error) {
     console.error('Registration failed:', error);
+    
+    // 处理数据库约束错误
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Email already registered'
+      });
+    }
+    
     res.status(500).json({
       status: 'error',
       message: 'Registration failed',
