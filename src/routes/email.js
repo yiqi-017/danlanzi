@@ -25,9 +25,9 @@ module.exports.createTransporter = createTransporter;
 
 // 发送邮件接口
 router.post('/send', [
-  body('to').isEmail().withMessage('收件人邮箱格式不正确'),
-  body('subject').notEmpty().withMessage('邮件主题不能为空'),
-  body('text').notEmpty().withMessage('邮件内容不能为空')
+  body('to').isEmail().withMessage('Invalid email format'),
+  body('subject').notEmpty().withMessage('Email subject cannot be empty'),
+  body('text').notEmpty().withMessage('Email content cannot be empty')
 ], async (req, res) => {
   try {
     // 验证请求参数
@@ -47,7 +47,7 @@ router.post('/send', [
       return res.status(500).json({
         status: 'error',
         message: 'Gmail email service not configured, please check EMAIL_USER and EMAIL_PASS environment variables',
-        help: '请参考文档配置 Gmail 应用专用密码'
+        help: 'Please refer to documentation to configure Gmail app password'
       });
     }
 
@@ -92,11 +92,11 @@ router.get('/test-config', async (req, res) => {
       status: 'error',
       message: 'Gmail configuration incomplete',
       config: {
-        emailUser: hasEmailUser ? '已配置' : '未配置',
-        emailPass: hasEmailPass ? '已配置' : '未配置',
+        emailUser: hasEmailUser ? 'Configured' : 'Not configured',
+        emailPass: hasEmailPass ? 'Configured' : 'Not configured',
         isReady: false
       },
-      help: '请配置 EMAIL_USER 和 EMAIL_PASS 环境变量'
+      help: 'Please configure EMAIL_USER and EMAIL_PASS environment variables'
     });
   }
 
@@ -110,7 +110,7 @@ router.get('/test-config', async (req, res) => {
       message: 'Gmail configuration correct, connection test successful',
       config: {
         emailUser: process.env.EMAIL_USER,
-        emailPass: '已配置',
+        emailPass: 'Configured',
         isReady: true
       }
     });
@@ -120,11 +120,11 @@ router.get('/test-config', async (req, res) => {
       message: 'Gmail connection test failed',
       config: {
         emailUser: process.env.EMAIL_USER,
-        emailPass: '已配置',
+        emailPass: 'Configured',
         isReady: false
       },
       error: error.message,
-      help: '请检查 Gmail 应用专用密码是否正确'
+      help: 'Please check if Gmail app password is correct'
     });
   }
 });

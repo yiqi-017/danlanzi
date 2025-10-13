@@ -28,10 +28,10 @@ const generateVerificationCode = () => {
 
 // 发送验证码邮件接口
 router.post('/send-verification-code', [
-  body('to').isEmail().withMessage('收件人邮箱格式不正确'),
-  body('subject').notEmpty().withMessage('邮件标题不能为空'),
-  body('text').notEmpty().withMessage('邮件文本内容不能为空'),
-  body('type').optional().isIn(['email_verification', 'password_reset', 'login']).withMessage('验证码类型不正确')
+  body('to').isEmail().withMessage('Invalid email format'),
+  body('subject').notEmpty().withMessage('Email subject cannot be empty'),
+  body('text').notEmpty().withMessage('Email text content cannot be empty'),
+  body('type').optional().isIn(['email_verification', 'password_reset', 'login']).withMessage('Invalid verification code type')
 ], async (req, res) => {
   try {
     // 验证请求参数
@@ -115,9 +115,9 @@ router.post('/send-verification-code', [
 
 // 验证验证码接口
 router.post('/verify-code', [
-  body('email').isEmail().withMessage('邮箱格式不正确'),
-  body('code').isLength({ min: 6, max: 6 }).withMessage('验证码必须是6位数字'),
-  body('type').optional().isIn(['email_verification', 'password_reset', 'login']).withMessage('验证码类型不正确')
+  body('email').isEmail().withMessage('Invalid email format'),
+  body('code').isLength({ min: 6, max: 6 }).withMessage('Verification code must be 6 digits'),
+  body('type').optional().isIn(['email_verification', 'password_reset', 'login']).withMessage('Invalid verification code type')
 ], async (req, res) => {
   try {
     // 验证请求参数
