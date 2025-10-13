@@ -34,8 +34,8 @@ const User = sequelize.define('User', {
       len: [1, 100]
     }
   },
-  avatar_url: {
-    type: DataTypes.STRING(255),
+  avatar_path: {
+    type: DataTypes.STRING(1024),
     allowNull: true
   },
   role: {

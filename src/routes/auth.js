@@ -2,8 +2,12 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
+const fs = require('fs');
+const path = require('path');
+const { dataPath } = require('../config/datapath');
 const { User, VerificationCode } = require('../models');
 const router = express.Router();
+
 
 // 用户注册接口
 router.post('/register', async (req, res) => {
@@ -39,6 +43,35 @@ router.post('/register', async (req, res) => {
       status: 'active'
     });
 
+    // 基于 dataPath 设置并创建默认头像目录，复制默认头像
+    try {
+      // 相对目录存库：user/[id]/avatar
+      const relativeAvatarDir = path.join('user', String(newUser.id), 'avatar');
+      const userAvatarDir = path.join(dataPath, relativeAvatarDir);
+      const defaultAvatarSrc = path.join(dataPath, 'system', 'DefaultAvatar.png');
+
+      if (!fs.existsSync(userAvatarDir)) {
+        fs.mkdirSync(userAvatarDir, { recursive: true });
+      }
+
+      // 仅当默认头像存在时执行复制
+      if (fs.existsSync(defaultAvatarSrc)) {
+        const destFile = path.join(userAvatarDir, 'Avatar.png');
+        try {
+          fs.copyFileSync(defaultAvatarSrc, destFile);
+        } catch (copyErr) {
+          console.warn('Copy default avatar failed:', copyErr);
+        }
+      } else {
+        console.warn('Default avatar not found at:', defaultAvatarSrc);
+      }
+
+      // 数据库存相对路径
+      await newUser.update({ avatar_path: relativeAvatarDir });
+    } catch (fsErr) {
+      console.warn('Avatar directory setup failed:', fsErr);
+    }
+
     // 标记验证码为已使用
     await VerificationCode.update(
       { isUsed: true, usedAt: new Date() },
@@ -57,6 +90,7 @@ router.post('/register', async (req, res) => {
       nickname: newUser.nickname,
       email: newUser.email,
       student_id: newUser.student_id,
+      avatar_path: newUser.avatar_path,
       role: newUser.role,
       status: newUser.status,
       created_at: newUser.created_at
@@ -156,5 +190,6 @@ router.post('/login', async (req, res) => {
     });
   }
 });
+
 
 module.exports = router;
