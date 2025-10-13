@@ -10,6 +10,9 @@ router.post('/register', async (req, res) => {
   try {
     const { nickname, email, password, verificationCode } = req.body;
 
+    // 解析邮箱本地部分作为 student_id
+    const studentIdFromEmail = (email || '').split('@')[0];
+
     // 检查邮箱是否已注册
     const existingUser = await User.findOne({
       where: { email: email }
@@ -30,6 +33,7 @@ router.post('/register', async (req, res) => {
     const newUser = await User.create({
       nickname: nickname,
       email: email,
+      student_id: studentIdFromEmail,
       password_hash: passwordHash,
       role: 'user',
       status: 'active'
@@ -52,6 +56,7 @@ router.post('/register', async (req, res) => {
       id: newUser.id,
       nickname: newUser.nickname,
       email: newUser.email,
+      student_id: newUser.student_id,
       role: newUser.role,
       status: newUser.status,
       created_at: newUser.created_at
@@ -68,9 +73,12 @@ router.post('/register', async (req, res) => {
     
     // 处理数据库约束错误
     if (error.name === 'SequelizeUniqueConstraintError') {
+      // 判断是否是 student_id 唯一冲突
+      const isStudentIdConflict = error.errors?.some(e => e.path === 'student_id' || e.message?.includes('student_id'));
+      const message = isStudentIdConflict ? 'StudentId already exists' : 'Email already registered';
       return res.status(400).json({
         status: 'error',
-        message: 'Email already registered'
+        message
       });
     }
     

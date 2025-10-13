@@ -30,28 +30,26 @@ npm install
 ```
 
 ### 3. 环境配置
-修改env中的内容
-```
 编辑 `.env` 文件，配置数据库连接等信息：
 ```env
 # 数据库配置
 DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=dlz_backend
-DB_USER=root
-DB_PASSWORD=your_password
+DB_USER=root                        # 改成你的，大概率也是root
+DB_PASSWORD=your_password           # 改成你的，忘了的这辈子有了
 
 # JWT配置
-JWT_SECRET=your_jwt_secret_key_here
-JWT_EXPIRES_IN=7d
+JWT_SECRET=your_jwt_secret_key_here # 自己随便写一个，记得别写太简单
+JWT_EXPIRES_IN=7d                   # 有效时间，是多久那一个用户登录状态就能维持多久
 
 # 服务器配置
-PORT=3000
-NODE_ENV=development
+PORT=3001                           # 服务端端口
+NODE_ENV=development                # 生产环境还是开发环境，目前没什么🐦用
 
 # 邮箱配置
-EMAIL_USER=your gmail address
-EMAIL_PASS=your gmail password
+EMAIL_USER=your gmail address       # 目前只会用gmail
+EMAIL_PASS=your gmail password      # 记得是gmail应用密码而不是你的gmail密码
 ```
 
 ### 4. 数据库初始化
@@ -59,7 +57,7 @@ EMAIL_PASS=your gmail password
 # 初始化数据库（创建空数据库）
 npm run init-db
 
-# 运行数据库迁移
+# 运行数据库迁移（每次修改表之后也要运行）
 npm run migrate
 ```
 

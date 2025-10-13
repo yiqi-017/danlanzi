@@ -15,6 +15,14 @@ const User = sequelize.define('User', {
       isEmail: true
     }
   },
+  student_id: {
+    type: DataTypes.STRING(255),
+    allowNull: false,
+    unique: true,
+    validate: {
+      len: [1, 255]
+    }
+  },
   password_hash: {
     type: DataTypes.STRING(255),
     allowNull: true
@@ -47,6 +55,10 @@ const User = sequelize.define('User', {
     {
       unique: true,
       fields: ['email']
+    },
+    {
+      unique: true,
+      fields: ['student_id']
     },
     {
       fields: ['status']
