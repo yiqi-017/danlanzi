@@ -48,7 +48,7 @@ router.post('/register', async (req, res) => {
       // 相对目录存库：user/[id]/avatar
       const relativeAvatarDir = path.join('user', String(newUser.id), 'avatar');
       const userAvatarDir = path.join(dataPath, relativeAvatarDir);
-      const defaultAvatarSrc = path.join(dataPath, 'system', 'DefaultAvatar.png');
+      const defaultAvatarSrc = path.join(dataPath, 'system', 'avatars', 'StudentKim.png');
 
       if (!fs.existsSync(userAvatarDir)) {
         fs.mkdirSync(userAvatarDir, { recursive: true });
