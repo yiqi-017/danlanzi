@@ -2,9 +2,28 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
+const sharp = require('sharp');
 const { User } = require('../models');
 const { dataPath } = require('../config/datapath');
 const router = express.Router();
+
+// 配置 multer 用于头像上传
+const storage = multer.memoryStorage(); // 使用内存存储，直接处理文件
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB 限制
+  },
+  fileFilter: (req, file, cb) => {
+    // 检查文件类型
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('只允许上传图片文件'), false);
+    }
+  }
+});
 
 // JWT 验证中间件
 const authenticateToken = (req, res, next) => {
@@ -83,6 +102,145 @@ router.get('/profile', authenticateToken, async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Failed to retrieve user profile',
+      error: error.message
+    });
+  }
+});
+
+// 换头像接口 - 支持直接文件上传
+router.post('/avatar', authenticateToken, (req, res, next) => {
+  upload.single('avatar')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+        return res.status(400).json({
+          status: 'error',
+          message: '请使用字段名 "avatar" 上传文件'
+        });
+      }
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          status: 'error',
+          message: '文件大小不能超过 5MB'
+        });
+      }
+      if (err.message === '只允许上传图片文件') {
+        return res.status(400).json({
+          status: 'error',
+          message: '只允许上传图片文件'
+        });
+      }
+      return res.status(400).json({
+        status: 'error',
+        message: '文件上传失败: ' + err.message
+      });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    // 验证文件是否上传
+    if (!req.file) {
+      return res.status(400).json({
+        status: 'error',
+        message: '请选择要上传的头像文件'
+      });
+    }
+
+    // 验证用户ID（可选，如果前端传了的话）
+    const userId = req.body.userId;
+    if (userId && userId !== req.user.userId) {
+      return res.status(403).json({
+        status: 'error',
+        message: '无权限修改其他用户的头像'
+      });
+    }
+
+    // 查找用户
+    const user = await User.findByPk(req.user.userId);
+    if (!user) {
+      return res.status(404).json({
+        status: 'error',
+        message: '用户不存在'
+      });
+    }
+
+    // 验证文件大小（5MB 限制）
+    if (req.file.size > 5 * 1024 * 1024) {
+      return res.status(400).json({
+        status: 'error',
+        message: '头像文件大小不能超过 5MB'
+      });
+    }
+
+    // 验证文件类型
+    if (!req.file.mimetype.startsWith('image/')) {
+      return res.status(400).json({
+        status: 'error',
+        message: '只允许上传图片文件'
+      });
+    }
+
+    // 创建用户头像目录（参考 auth.js 中的逻辑）
+    const relativeAvatarDir = path.join('user', String(user.id), 'avatar');
+    const absoluteAvatarDir = path.join(dataPath, relativeAvatarDir);
+    
+    // 确保目录存在
+    if (!fs.existsSync(absoluteAvatarDir)) {
+      fs.mkdirSync(absoluteAvatarDir, { recursive: true });
+    }
+
+    // 保存头像文件（统一保存为 Avatar.png）
+    const avatarFileName = 'Avatar.png';
+    const avatarFilePath = path.join(absoluteAvatarDir, avatarFileName);
+    
+    // 使用 sharp 将图片转换为 PNG 格式并优化
+    try {
+      await sharp(req.file.buffer)
+        .resize(512, 512, { 
+          fit: 'cover', 
+          position: 'center' 
+        }) // 调整尺寸为 512x512，保持比例
+        .png({ 
+          quality: 90,
+          compressionLevel: 6 
+        }) // 转换为 PNG 格式，设置质量
+        .toFile(avatarFilePath);
+      
+      console.log('头像转换并保存成功:', avatarFilePath);
+    } catch (sharpError) {
+      console.error('图片处理失败:', sharpError);
+      return res.status(500).json({
+        status: 'error',
+        message: '图片处理失败，请检查图片格式是否正确'
+      });
+    }
+
+    // 更新数据库中的头像路径
+    await user.update({ avatar_path: relativeAvatarDir });
+
+    // 获取转换后的文件信息
+    const convertedFileStats = fs.statSync(avatarFilePath);
+    
+    // 返回成功响应
+    res.json({
+      status: 'success',
+      message: '头像更新成功',
+      avatar_path: relativeAvatarDir,
+      file_info: {
+        originalname: req.file.originalname,
+        original_size: req.file.size,
+        original_mimetype: req.file.mimetype,
+        converted_size: convertedFileStats.size,
+        converted_format: 'PNG',
+        dimensions: '512x512'
+      }
+    });
+
+  } catch (error) {
+    console.error('换头像失败:', error);
+    res.status(500).json({
+      status: 'error',
+      message: '头像更新失败',
       error: error.message
     });
   }
