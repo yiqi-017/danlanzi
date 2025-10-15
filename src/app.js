@@ -8,8 +8,8 @@ const { sequelize } = require('./models');
 const emailRoutes = require('./routes/email');
 const verificationRoutes = require('./routes/verification');
 const authRoutes = require('./routes/auth');
-const userprofileRoutes = require('./routes/userprofile');
-const avatarRoutes = require('./routes/avatars');
+const userProfileRoutes = require('./routes/userProfile');
+const userAvatarRoutes = require('./routes/userAvatar');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -29,8 +29,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api/email', emailRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/userprofile', userprofileRoutes);
-app.use('/api/avatars', avatarRoutes);
+app.use('/api/userProfile', userProfileRoutes);
+app.use('/api/userAvatar', userAvatarRoutes);
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
