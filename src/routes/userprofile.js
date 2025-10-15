@@ -203,17 +203,10 @@ router.post('/avatar', authenticateToken, (req, res, next) => {
     const avatarFileName = 'Avatar.png';
     const avatarFilePath = path.join(absoluteAvatarDir, avatarFileName);
     
-    // 使用 sharp 将图片转换为 PNG 格式并优化
+    // 使用 sharp 将图片转换为 PNG 格式（保持原图尺寸）
     try {
       await sharp(req.file.buffer)
-        .resize(512, 512, { 
-          fit: 'cover', 
-          position: 'center' 
-        }) // 调整尺寸为 512x512，保持比例
-        .png({ 
-          quality: 90,
-          compressionLevel: 6 
-        }) // 转换为 PNG 格式，设置质量
+        .png() // 转换为 PNG 格式，保持原图尺寸和质量
         .toFile(avatarFilePath);
       
       console.log('头像转换并保存成功:', avatarFilePath);
@@ -231,6 +224,9 @@ router.post('/avatar', authenticateToken, (req, res, next) => {
     // 获取转换后的文件信息
     const convertedFileStats = fs.statSync(avatarFilePath);
     
+    // 获取原图尺寸信息
+    const imageInfo = await sharp(avatarFilePath).metadata();
+    
     // 返回成功响应
     res.json({
       status: 'success',
@@ -242,7 +238,7 @@ router.post('/avatar', authenticateToken, (req, res, next) => {
         original_mimetype: req.file.mimetype,
         converted_size: convertedFileStats.size,
         converted_format: 'PNG',
-        dimensions: '512x512'
+        dimensions: `${imageInfo.width}x${imageInfo.height}`
       }
     });
 
