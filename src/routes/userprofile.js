@@ -9,7 +9,7 @@ const { dataPath } = require('../config/datapath');
 const router = express.Router();
 
 // 配置 multer 用于头像上传
-const storage = multer.memoryStorage(); // 使用内存存储，直接处理文件
+const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
@@ -28,7 +28,7 @@ const upload = multer({
 // JWT 验证中间件
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
     return res.status(401).json({
@@ -87,6 +87,16 @@ router.get('/profile', authenticateToken, async (req, res) => {
       avatar_data_url,
       role: user.role,
       status: user.status,
+      department: user.department,
+      major: user.major,
+      bio: user.bio,
+      security_email: user.security_email,
+      theme: user.theme,
+      language: user.language,
+      show_student_id: user.show_student_id,
+      show_department: user.show_department,
+      show_major: user.show_major,
+      show_bio: user.show_bio,
       created_at: user.created_at,
       updated_at: user.updated_at
     };
@@ -241,6 +251,167 @@ router.post('/avatar', authenticateToken, (req, res, next) => {
     res.status(500).json({
       status: 'error',
       message: '头像更新失败',
+      error: error.message
+    });
+  }
+});
+
+// 更新用户资料和隐私设置接口（合并）
+router.put('/profile', authenticateToken, async (req, res) => {
+  try {
+    const { 
+      // 用户资料字段
+      nickname, 
+      department, 
+      major, 
+      bio, 
+      security_email,
+      theme,
+      language,
+      // 隐私设置字段
+      show_student_id, 
+      show_department, 
+      show_major, 
+      show_bio 
+    } = req.body;
+
+    // 查找用户
+    const user = await User.findByPk(req.user.userId);
+    if (!user) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'User not found'
+      });
+    }
+
+    // 构建更新数据对象
+    const updateData = {};
+    
+    // 用户资料字段
+    if (nickname !== undefined) updateData.nickname = nickname;
+    if (department !== undefined) updateData.department = department;
+    if (major !== undefined) updateData.major = major;
+    if (bio !== undefined) updateData.bio = bio;
+    if (security_email !== undefined) updateData.security_email = security_email;
+    if (theme !== undefined) updateData.theme = theme;
+    if (language !== undefined) updateData.language = language;
+    
+    // 隐私设置字段
+    if (show_student_id !== undefined) updateData.show_student_id = show_student_id;
+    if (show_department !== undefined) updateData.show_department = show_department;
+    if (show_major !== undefined) updateData.show_major = show_major;
+    if (show_bio !== undefined) updateData.show_bio = show_bio;
+
+    // 更新用户信息
+    await user.update(updateData);
+
+    // 返回更新后的用户信息
+    const userResponse = {
+      id: user.id,
+      nickname: user.nickname,
+      email: user.email,
+      student_id: user.student_id,
+      avatar_path: user.avatar_path,
+      role: user.role,
+      status: user.status,
+      // 用户资料字段
+      department: user.department,
+      major: user.major,
+      bio: user.bio,
+      security_email: user.security_email,
+      theme: user.theme,
+      language: user.language,
+      // 隐私控制字段
+      show_student_id: user.show_student_id,
+      show_department: user.show_department,
+      show_major: user.show_major,
+      show_bio: user.show_bio,
+      created_at: user.created_at,
+      updated_at: user.updated_at
+    };
+
+    res.json({
+      status: 'success',
+      message: 'User profile updated successfully',
+      user: userResponse
+    });
+
+  } catch (error) {
+    console.error('Update user profile failed:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to update user profile',
+      error: error.message
+    });
+  }
+});
+
+// 获取其他用户公开资料接口
+router.get('/profile/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // 查找用户
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'User not found'
+      });
+    }
+
+    // 根据隐私设置构建公开信息
+    const publicProfile = {
+      id: user.id,
+      nickname: user.nickname,
+      avatar_path: user.avatar_path,
+      role: user.role,
+      created_at: user.created_at
+    };
+
+    // 根据隐私设置添加字段
+    if (user.show_student_id) {
+      publicProfile.student_id = user.student_id;
+    }
+    if (user.show_department) {
+      publicProfile.department = user.department;
+    }
+    if (user.show_major) {
+      publicProfile.major = user.major;
+    }
+    if (user.show_bio) {
+      publicProfile.bio = user.bio;
+    }
+
+    // 读取头像为 dataURL（若存在）
+    let avatar_data_url = null;
+    try {
+      if (user.avatar_path) {
+        const absoluteAvatarDir = path.join(dataPath, user.avatar_path);
+        const avatarFile = path.join(absoluteAvatarDir, 'Avatar.png');
+        if (fs.existsSync(avatarFile)) {
+          const buf = fs.readFileSync(avatarFile);
+          const b64 = buf.toString('base64');
+          avatar_data_url = `data:image/png;base64,${b64}`;
+        }
+      }
+    } catch (e) {
+      // 头像读取失败时不影响整体返回
+    }
+    
+    publicProfile.avatar_data_url = avatar_data_url;
+
+    res.json({
+      status: 'success',
+      message: 'Public profile retrieved successfully',
+      user: publicProfile
+    });
+
+  } catch (error) {
+    console.error('Get public profile failed:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve public profile',
       error: error.message
     });
   }

@@ -40,7 +40,13 @@ router.post('/register', async (req, res) => {
       student_id: studentIdFromEmail,
       password_hash: passwordHash,
       role: 'user',
-      status: 'active'
+      status: 'active',
+      theme: 'dark',
+      language: 'zh-CN',
+      show_student_id: true,
+      show_department: true,
+      show_major: true,
+      show_bio: true
     });
 
     // 基于 dataPath 设置并创建默认头像目录，复制默认头像
@@ -93,6 +99,9 @@ router.post('/register', async (req, res) => {
       avatar_path: newUser.avatar_path,
       role: newUser.role,
       status: newUser.status,
+      // 新增的用户偏好字段
+      theme: newUser.theme,
+      language: newUser.language,
       created_at: newUser.created_at
     };
 
@@ -171,6 +180,9 @@ router.post('/login', async (req, res) => {
       email: user.email,
       role: user.role,
       status: user.status,
+      // 新增的用户偏好字段
+      theme: user.theme,
+      language: user.language,
       created_at: user.created_at
     };
 
