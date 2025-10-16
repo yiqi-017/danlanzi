@@ -350,12 +350,12 @@ router.post('/', authenticateToken, (req, res, next) => {
 
       // 裁剪、调整尺寸并保存为PNG
       await image
-        .extract(cropArea)  // 先裁剪
-        .resize(720, 720, {  // 调整到固定尺寸
+        .extract(cropArea)
+        .resize(720, 720, {
           fit: 'cover',
           position: 'center'
         })
-        .png({ quality: 90 })  // 转换为PNG并设置质量
+        .png({ quality: 90 })
         .toFile(avatarFilePath);
       
       console.log('头像处理并保存成功:', avatarFilePath);
