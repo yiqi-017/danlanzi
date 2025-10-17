@@ -10,6 +10,7 @@ const verificationRoutes = require('./routes/verification');
 const authRoutes = require('./routes/auth');
 const userProfileRoutes = require('./routes/userProfile');
 const userAvatarRoutes = require('./routes/userAvatar');
+const resourcesRoutes = require('./routes/resources');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -31,6 +32,7 @@ app.use('/api/verification', verificationRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/userProfile', userProfileRoutes);
 app.use('/api/userAvatar', userAvatarRoutes);
+app.use('/api/resources', resourcesRoutes);
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
