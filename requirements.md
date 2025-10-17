@@ -7,13 +7,40 @@
 |--------|------|------|------|
 | id | BIGINT | PK | 用户唯一 ID |
 | email | VARCHAR(255) | UNIQUE, NOT NULL | 登录邮箱 |
+| student_id | VARCHAR(255) | UNIQUE, NOT NULL | 学号 |
 | password_hash | VARCHAR(255) | 可空 | 密码哈希（或空，用于统一认证登录） |
 | nickname | VARCHAR(100) | NOT NULL | 用户昵称 |
-| avatar_url | VARCHAR(255) |  | 头像链接 |
+| avatar_path | VARCHAR(1024) | 可空 | 头像文件路径 |
 | role | ENUM('user','admin') | DEFAULT 'user' | 用户角色（普通用户/系统管理员） |
 | status | ENUM('active','banned','deleted') | DEFAULT 'active' | 账号状态 |
+| department | VARCHAR(100) | 可空 | 所属院系 |
+| major | VARCHAR(100) | 可空 | 专业 |
+| bio | TEXT | 可空 | 个人简介 |
+| security_email | VARCHAR(255) | 可空 | 安全邮箱 |
+| theme | ENUM('light','dark','auto') | DEFAULT 'dark' | 主题设置 |
+| language | ENUM('zh-CN','en-US') | DEFAULT 'zh-CN' | 语言设置 |
+| unified_auth_password | VARCHAR(255) | 可空 | 统一认证密码 |
+| show_student_id | BOOLEAN | DEFAULT TRUE | 是否显示学号 |
+| show_department | BOOLEAN | DEFAULT TRUE | 是否显示院系 |
+| show_major | BOOLEAN | DEFAULT TRUE | 是否显示专业 |
+| show_bio | BOOLEAN | DEFAULT TRUE | 是否显示个人简介 |
 | created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | updated_at | DATETIME | ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
+
+---
+
+### **verification_codes — 验证码表**
+| 字段名 | 类型 | 约束 | 说明 |
+|--------|------|------|------|
+| id | INT | PK | 验证码 ID |
+| email | VARCHAR(255) | NOT NULL | 邮箱地址 |
+| code | VARCHAR(6) | NOT NULL | 验证码 |
+| type | ENUM('email_verification','password_reset','login') | DEFAULT 'email_verification' | 验证码类型 |
+| expiresAt | DATETIME | NOT NULL | 过期时间 |
+| isUsed | BOOLEAN | DEFAULT FALSE | 是否已使用 |
+| usedAt | DATETIME | 可空 | 使用时间 |
+| created_at | DATETIME |  | 创建时间 |
+| updated_at | DATETIME |  | 更新时间 |
 
 ---
 
@@ -234,7 +261,7 @@
 
 | 模块 | 表名 | 功能 |
 |------|------|------|
-| 用户系统 | users, user_profiles | 用户与权限管理 |
+| 用户系统 | users, verification_codes | 用户与权限管理、邮箱验证 |
 | 课程 | courses, course_offerings, enrollments | 课程与选课 |
 | 资源 | resources, resource_course_links, resource_favorites | 资源上传与收藏 |
 | 课程评价 | course_reviews, review_comments | 课程体验与评论 |
