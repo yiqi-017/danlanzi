@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { Resource, ResourceCourseLink, ResourceStat, ResourceFavorite } = require('../models');
+const { sequelize, Resource, ResourceCourseLink, ResourceStat, ResourceFavorite } = require('../models');
 
 const router = express.Router();
 
@@ -207,6 +207,41 @@ router.post('/:id/favorite', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Favorite resource failed:', error);
     return res.status(500).json({ status: 'error', message: '收藏失败', error: error.message });
+  }
+});
+
+// 取消收藏资源
+router.delete('/:id/favorite', authenticateToken, async (req, res) => {
+  try {
+    const resourceId = Number(req.params.id);
+    if (!resourceId || Number.isNaN(resourceId)) {
+      return res.status(400).json({ status: 'error', message: '无效的资源ID' });
+    }
+
+    // 检查资源是否存在
+    const resource = await Resource.findByPk(resourceId);
+    if (!resource) {
+      return res.status(404).json({ status: 'error', message: '资源不存在' });
+    }
+
+    // 删除收藏关系（幂等）
+    await ResourceFavorite.destroy({ where: { user_id: req.user.userId, resource_id: resourceId } });
+
+    // 统计递减但不低于 0
+    const [affected] = await ResourceStat.update(
+      { favorite_count: sequelize.literal('CASE WHEN favorite_count > 0 THEN favorite_count - 1 ELSE 0 END') },
+      { where: { resource_id: resourceId } }
+    );
+
+    if (!affected || (Array.isArray(affected) && affected[0] === 0)) {
+      // 如果统计不存在则补建为 0
+      await ResourceStat.create({ resource_id: resourceId, favorite_count: 0 });
+    }
+
+    return res.status(200).json({ status: 'success', message: '已取消收藏' });
+  } catch (error) {
+    console.error('Unfavorite resource failed:', error);
+    return res.status(500).json({ status: 'error', message: '取消收藏失败', error: error.message });
   }
 });
 
