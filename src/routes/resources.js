@@ -308,6 +308,118 @@ router.delete('/:id/like', authenticateToken, async (req, res) => {
   }
 });
 
+// 下载资源
+router.get('/:id/download', authenticateToken, async (req, res) => {
+  try {
+    const resourceId = Number(req.params.id);
+    if (!resourceId || Number.isNaN(resourceId)) {
+      return res.status(400).json({ status: 'error', message: '无效的资源ID' });
+    }
+
+    const resource = await Resource.findByPk(resourceId);
+    if (!resource) {
+      return res.status(404).json({ status: 'error', message: '资源不存在' });
+    }
+
+    if (resource.type !== 'file') {
+      return res.status(400).json({ status: 'error', message: '只有文件类型资源可下载' });
+    }
+
+    const filePath = path.join(__dirname, '../../../dlz-database', resource.url_or_path);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ status: 'error', message: '文件不存在' });
+    }
+
+    // 更新下载统计
+    await ResourceStat.increment(
+      { download_count: 1 },
+      { where: { resource_id: resourceId } }
+    );
+
+    // 设置下载响应头
+    const fileName = path.basename(resource.url_or_path);
+    const fileExt = path.extname(fileName); // 获取原文件后缀
+    const downloadName = resource.title + fileExt; // title + 后缀
+    
+    // 标准双重编码兼容方案
+    const encodedFileName = encodeURIComponent(downloadName); // UTF-8 编码
+    const asciiFileName = downloadName.replace(/[^\x00-\x7F]/g, '_'); // ASCII 兼容版本
+    
+    console.log('【下载文件】原始文件名（path.basename结果）：', fileName);
+    console.log('【下载文件】提取的文件后缀：', fileExt);
+    console.log('【下载文件】拼接后的下载文件名：', downloadName);
+    console.log('【下载文件】UTF-8编码后的文件名：', encodedFileName);
+    console.log('【下载文件】ASCII兼容文件名（替换非ASCII并转义引号）：', asciiFileName);
+
+    // 同时声明两种格式：filename（兼容旧客户端）和 filename*（RFC 5987 标准）
+    res.setHeader('Content-Disposition', `attachment; filename="${asciiFileName}"; filename*=utf-8''${encodedFileName}`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+
+    // 发送文件
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('Download resource failed:', error);
+    return res.status(500).json({ status: 'error', message: '下载失败', error: error.message });
+  }
+});
+
+// 删除资源
+router.delete('/:id', authenticateToken, async (req, res) => {
+  try {
+    const resourceId = Number(req.params.id);
+    if (!resourceId || Number.isNaN(resourceId)) {
+      return res.status(400).json({ status: 'error', message: '无效的资源ID' });
+    }
+
+    const resource = await Resource.findByPk(resourceId);
+    if (!resource) {
+      return res.status(404).json({ status: 'error', message: '资源不存在' });
+    }
+
+    // 检查权限：只有上传者或管理员可删除
+    if (resource.uploader_id !== req.user.userId && req.user.role !== 'admin') {
+      return res.status(403).json({ status: 'error', message: '无权限删除此资源' });
+    }
+
+    // 删除文件（如果是文件类型）
+    if (resource.type === 'file' && resource.url_or_path) {
+      const filePath = path.join(__dirname, '../../../dlz-database', resource.url_or_path);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (fileErr) {
+          console.error('Delete file failed:', fileErr);
+          // 继续删除数据库记录，不阻断流程
+        }
+      }
+    }
+
+    // 删除所有相关数据（使用事务确保一致性）
+    await sequelize.transaction(async (t) => {
+      // 删除统计信息
+      await ResourceStat.destroy({ where: { resource_id: resourceId }, transaction: t });
+      
+      // 删除收藏记录
+      await ResourceFavorite.destroy({ where: { resource_id: resourceId }, transaction: t });
+      
+      // 删除点赞记录
+      await ResourceLike.destroy({ where: { resource_id: resourceId }, transaction: t });
+      
+      // 删除课程关联
+      await ResourceCourseLink.destroy({ where: { resource_id: resourceId }, transaction: t });
+      
+      // 最后删除资源本身
+      await Resource.destroy({ where: { id: resourceId }, transaction: t });
+    });
+
+    return res.status(200).json({ status: 'success', message: '资源删除成功' });
+  } catch (error) {
+    console.error('Delete resource failed:', error);
+    return res.status(500).json({ status: 'error', message: '删除失败', error: error.message });
+  }
+});
+
 module.exports = router;
 
 
