@@ -123,6 +123,16 @@
 
 ---
 
+### **resource_likes — 用户点赞资源表**
+| 字段名 | 类型 | 约束 | 说明 |
+|--------|------|------|------|
+| user_id | BIGINT | FK→users.id | 用户 ID |
+| resource_id | BIGINT | FK→resources.id | 资源 ID |
+| created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | 点赞时间 |
+| **主键** | (`user_id`,`resource_id`) |  | 复合主键 |
+
+---
+
 ### **resource_stats — 资源统计信息**
 | 字段名 | 类型 | 约束 | 说明 |
 |--------|------|------|------|
@@ -263,7 +273,7 @@
 |------|------|------|
 | 用户系统 | users, verification_codes | 用户与权限管理、邮箱验证 |
 | 课程 | courses, course_offerings, enrollments | 课程与选课 |
-| 资源 | resources, resource_course_links, resource_favorites | 资源上传与收藏 |
+| 资源 | resources, resource_course_links, resource_favorites, resource_likes | 资源上传、收藏与点赞 |
 | 课程评价 | course_reviews, review_comments | 课程体验与评论 |
 | 通知公告 | notifications, announcements, user_announcement_reads | 用户通知与系统公告 |
 | 审核与举报 | reports, moderation_queue | 内容治理 |

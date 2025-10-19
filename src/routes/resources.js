@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { sequelize, Resource, ResourceCourseLink, ResourceStat, ResourceFavorite } = require('../models');
+const { sequelize, Resource, ResourceCourseLink, ResourceStat, ResourceFavorite, ResourceLike } = require('../models');
 
 const router = express.Router();
 
@@ -242,6 +242,69 @@ router.delete('/:id/favorite', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Unfavorite resource failed:', error);
     return res.status(500).json({ status: 'error', message: '取消收藏失败', error: error.message });
+  }
+});
+
+// 点赞资源
+router.post('/:id/like', authenticateToken, async (req, res) => {
+  try {
+    const resourceId = Number(req.params.id);
+    if (!resourceId || Number.isNaN(resourceId)) {
+      return res.status(400).json({ status: 'error', message: '无效的资源ID' });
+    }
+
+    const resource = await Resource.findByPk(resourceId);
+    if (!resource) {
+      return res.status(404).json({ status: 'error', message: '资源不存在' });
+    }
+
+    await ResourceLike.findOrCreate({
+      where: { user_id: req.user.userId, resource_id: resourceId },
+      defaults: { user_id: req.user.userId, resource_id: resourceId }
+    });
+
+    const [affected] = await ResourceStat.increment(
+      { like_count: 1 },
+      { where: { resource_id: resourceId } }
+    );
+    if (!affected || (Array.isArray(affected) && affected[0] === 0)) {
+      await ResourceStat.create({ resource_id: resourceId, like_count: 1 });
+    }
+
+    return res.status(200).json({ status: 'success', message: '点赞成功' });
+  } catch (error) {
+    console.error('Like resource failed:', error);
+    return res.status(500).json({ status: 'error', message: '点赞失败', error: error.message });
+  }
+});
+
+// 取消点赞资源
+router.delete('/:id/like', authenticateToken, async (req, res) => {
+  try {
+    const resourceId = Number(req.params.id);
+    if (!resourceId || Number.isNaN(resourceId)) {
+      return res.status(400).json({ status: 'error', message: '无效的资源ID' });
+    }
+
+    const resource = await Resource.findByPk(resourceId);
+    if (!resource) {
+      return res.status(404).json({ status: 'error', message: '资源不存在' });
+    }
+
+    await ResourceLike.destroy({ where: { user_id: req.user.userId, resource_id: resourceId } });
+
+    const [affected] = await ResourceStat.update(
+      { like_count: sequelize.literal('CASE WHEN like_count > 0 THEN like_count - 1 ELSE 0 END') },
+      { where: { resource_id: resourceId } }
+    );
+    if (!affected || (Array.isArray(affected) && affected[0] === 0)) {
+      await ResourceStat.create({ resource_id: resourceId, like_count: 0 });
+    }
+
+    return res.status(200).json({ status: 'success', message: '已取消点赞' });
+  } catch (error) {
+    console.error('Unlike resource failed:', error);
+    return res.status(500).json({ status: 'error', message: '取消点赞失败', error: error.message });
   }
 });
 

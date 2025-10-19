@@ -9,6 +9,7 @@ const Resource = require('./Resource');
 const ResourceCourseLink = require('./ResourceCourseLink');
 const ResourceFavorite = require('./ResourceFavorite');
 const ResourceStat = require('./ResourceStat');
+const ResourceLike = require('./ResourceLike');
 const CourseReview = require('./CourseReview');
 const ReviewComment = require('./ReviewComment');
 const Notification = require('./Notification');
@@ -50,6 +51,9 @@ Resource.belongsTo(User, { foreignKey: 'uploader_id', as: 'uploader' });
 Resource.hasMany(ResourceCourseLink, { foreignKey: 'resource_id', as: 'courseLinks' });
 Resource.hasMany(ResourceFavorite, { foreignKey: 'resource_id', as: 'favorites' });
 Resource.hasOne(ResourceStat, { foreignKey: 'resource_id', as: 'stats' });
+Resource.hasMany(ResourceLike, { foreignKey: 'resource_id', as: 'likes' });
+ResourceLike.belongsTo(Resource, { foreignKey: 'resource_id', as: 'resource' });
+ResourceLike.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 ResourceCourseLink.belongsTo(Resource, { foreignKey: 'resource_id', as: 'resource' });
 ResourceCourseLink.belongsTo(Course, { foreignKey: 'course_id', as: 'course' });
@@ -96,6 +100,7 @@ module.exports = {
   ResourceCourseLink,
   ResourceFavorite,
   ResourceStat,
+  ResourceLike,
   CourseReview,
   ReviewComment,
   Notification,
