@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { Resource, ResourceCourseLink } = require('../models');
+const { Resource, ResourceCourseLink, ResourceStat } = require('../models');
 
 const router = express.Router();
 
@@ -147,6 +147,14 @@ router.post('/', authenticateToken, (req, res, next) => {
         course_id: course_id || null,
         offering_id: offering_id || null
       });
+    }
+
+    // 初始化资源统计信息（最后互动时间设为上传时间）
+    try {
+      await ResourceStat.create({ resource_id: resource.id, last_interacted_at: new Date() });
+    } catch (statErr) {
+      console.error('Create resource stat failed:', statErr);
+      // 不阻断资源创建流程
     }
 
     return res.status(201).json({
