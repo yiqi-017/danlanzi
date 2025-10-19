@@ -3,23 +3,37 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { Resource, ResourceCourseLink } = require('../../models');
+const { Resource, ResourceCourseLink } = require('../models');
 
 const router = express.Router();
 
-// 资源文件存储目录（绝对路径）
-const RESOURCES_BASE_DIR = path.join(__dirname, '../../../../dlz-database/resources');
-// 相对路径前缀，写入数据库
-const RESOURCES_REL_PREFIX = 'resources';
+// 用户资源根目录（绝对路径）: dlz-database/user
+const USER_BASE_DIR = path.join(__dirname, '../../../dlz-database/user');
+// 资源子目录名
+const RESOURCES_SUB_DIR = 'resources';
 
 // 确保存储目录存在
-if (!fs.existsSync(RESOURCES_BASE_DIR)) {
-  fs.mkdirSync(RESOURCES_BASE_DIR, { recursive: true });
+if (!fs.existsSync(USER_BASE_DIR)) {
+  fs.mkdirSync(USER_BASE_DIR, { recursive: true });
 }
 
 // 配置 multer（允许多种类型，必要时在 fileFilter 限制）
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, RESOURCES_BASE_DIR),
+  destination: (req, file, cb) => {
+    const userId = req?.user?.userId;
+    if (!userId) {
+      return cb(new Error('缺少用户身份，无法确定资源存储目录'));
+    }
+    const userResourcesDir = path.join(USER_BASE_DIR, String(userId), RESOURCES_SUB_DIR);
+    if (!fs.existsSync(userResourcesDir)) {
+      try {
+        fs.mkdirSync(userResourcesDir, { recursive: true });
+      } catch (e) {
+        return cb(new Error('创建用户资源目录失败'));
+      }
+    }
+    cb(null, userResourcesDir);
+  },
   filename: (req, file, cb) => {
     const ts = Date.now();
     const safeBase = (file.originalname || 'file').replace(/[\\/:*?"<>|]/g, '_');
@@ -31,7 +45,6 @@ const upload = multer({
   storage,
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    // 如需仅允许 txt，可改为：if (file.mimetype !== 'text/plain') return cb(new Error('仅支持 .txt'));
     cb(null, true);
   }
 });
@@ -103,8 +116,8 @@ router.post('/', authenticateToken, (req, res, next) => {
       if (!req.file) {
         return res.status(400).json({ status: 'error', message: '请通过字段名 file 上传文件' });
       }
-      // 存储相对路径，如 resources/res_1710000000000.txt
-      finalUrlOrPath = path.join(RESOURCES_REL_PREFIX, req.file.filename).replace(/\\/g, '/');
+      // 存储相对路径，如 user/7/resources/res_1710000000000.txt
+      finalUrlOrPath = path.join('user', String(req.user.userId), RESOURCES_SUB_DIR, req.file.filename).replace(/\\/g, '/');
     } else if (type === 'link') {
       const input = (url_or_path || '').trim();
       if (!input) {
