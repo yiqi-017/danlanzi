@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { Resource, ResourceCourseLink, ResourceStat } = require('../models');
+const { Resource, ResourceCourseLink, ResourceStat, ResourceFavorite } = require('../models');
 
 const router = express.Router();
 
@@ -169,6 +169,44 @@ router.post('/', authenticateToken, (req, res, next) => {
       message: 'Failed to create resource',
       error: error.message
     });
+  }
+});
+
+// 收藏资源
+router.post('/:id/favorite', authenticateToken, async (req, res) => {
+  try {
+    const resourceId = Number(req.params.id);
+    if (!resourceId || Number.isNaN(resourceId)) {
+      return res.status(400).json({ status: 'error', message: '无效的资源ID' });
+    }
+
+    // 检查资源是否存在
+    const resource = await Resource.findByPk(resourceId);
+    if (!resource) {
+      return res.status(404).json({ status: 'error', message: '资源不存在' });
+    }
+
+    // 创建收藏（若已存在则忽略）
+    await ResourceFavorite.findOrCreate({
+      where: { user_id: req.user.userId, resource_id: resourceId },
+      defaults: { user_id: req.user.userId, resource_id: resourceId }
+    });
+
+    // 递增收藏数
+    const [affected] = await ResourceStat.increment(
+      { favorite_count: 1 },
+      { where: { resource_id: resourceId } }
+    );
+
+    // 如果统计不存在（理论上会在创建资源时初始化），则创建一条
+    if (!affected || (Array.isArray(affected) && affected[0] === 0)) {
+      await ResourceStat.create({ resource_id: resourceId, favorite_count: 1 });
+    }
+
+    return res.status(200).json({ status: 'success', message: '收藏成功' });
+  } catch (error) {
+    console.error('Favorite resource failed:', error);
+    return res.status(500).json({ status: 'error', message: '收藏失败', error: error.message });
   }
 });
 
