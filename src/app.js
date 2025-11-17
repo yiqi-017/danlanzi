@@ -13,6 +13,7 @@ const userAvatarRoutes = require('./routes/userAvatar');
 const resourcesRoutes = require('./routes/resources');
 const courseRoutes = require('./routes/course');
 const detectRoutes = require('./routes/detect');
+const announcementRoutes = require('./routes/announcement');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -37,6 +38,7 @@ app.use('/api/userAvatar', userAvatarRoutes);
 app.use('/api/resources', resourcesRoutes);
 app.use('/api/course', courseRoutes);
 app.use('/api/detect', detectRoutes);
+app.use('/api/announcements', announcementRoutes);
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
