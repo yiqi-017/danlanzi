@@ -41,6 +41,11 @@ const Resource = sequelize.define('Resource', {
   status: {
     type: DataTypes.ENUM('normal', 'blocked', 'deleted'),
     defaultValue: 'normal'
+  },
+  tags: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: '资源标签，JSON数组格式'
   }
 }, {
   tableName: 'resources',

@@ -70,8 +70,29 @@ router.post('/', authenticateToken, (req, res, next) => {
       url_or_path = '',
       visibility = 'public',
       course_id = null,
-      offering_id = null
+      offering_id = null,
+      tags = null
     } = req.body || {};
+    
+    // 处理tags：如果是字符串，尝试解析为JSON数组
+    let tagsArray = null;
+    if (tags) {
+      if (typeof tags === 'string') {
+        try {
+          tagsArray = JSON.parse(tags);
+        } catch (e) {
+          // 如果不是JSON，当作单个标签处理
+          tagsArray = [tags.trim()].filter(t => t);
+        }
+      } else if (Array.isArray(tags)) {
+        tagsArray = tags.filter(t => t && typeof t === 'string' && t.trim()).map(t => t.trim());
+      }
+      
+      // 确保是数组格式
+      if (tagsArray && tagsArray.length === 0) {
+        tagsArray = null;
+      }
+    }
 
     // 基本校验
     const allowedTypes = ['file', 'link', 'note'];
@@ -114,7 +135,8 @@ router.post('/', authenticateToken, (req, res, next) => {
       description,
       url_or_path: finalUrlOrPath,
       visibility,
-      status: 'normal'
+      status: 'normal',
+      tags: tagsArray
     });
 
     // 可选：建立课程/开课实例关联
