@@ -42,7 +42,7 @@ app.use('/api/course', courseRoutes);
 app.use('/api/detect', detectRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/reviews', reviewsRoutes);
-//app.use('/api/reviewComments', reviewCommentsRoutes);
+app.use('/api/reviewComments', reviewCommentsRoutes);
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
