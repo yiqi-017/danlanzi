@@ -179,6 +179,67 @@
 
 ---
 
+### **review_reactions — 课程评价点赞/点踩表**
+| 字段名 | 类型 | 约束 | 说明 |
+|--------|------|------|------|
+| user_id | BIGINT | FK→users.id | 用户 ID |
+| review_id | BIGINT | FK→course_reviews.id | 评价 ID |
+| reaction | ENUM('like','dislike') | NOT NULL | 反应类型（赞/踩） |
+| created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| updated_at | DATETIME | ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
+| **主键** | (`user_id`,`review_id`) |  | 复合主键，限制同一用户对同一评价仅一条记录 |
+
+说明：使用一张表同时表示点赞与点踩，通过 `reaction` 字段区分。若用户改变态度（赞↔踩），更新该条记录的 `reaction` 即可。
+
+---
+
+### **review_comment_reactions — 课程评价评论点赞/点踩表**
+| 字段名 | 类型 | 约束 | 说明 |
+|--------|------|------|------|
+| user_id | BIGINT | FK→users.id | 用户 ID |
+| comment_id | BIGINT | FK→review_comments.id | 评论 ID |
+| reaction | ENUM('like','dislike') | NOT NULL | 反应类型（赞/踩） |
+| created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| updated_at | DATETIME | ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
+| **主键** | (`user_id`,`comment_id`) |  | 复合主键，限制同一用户对同一评论仅一条记录 |
+
+说明：与评价反应表一致，用 `reaction` 区分点赞/点踩，避免分裂为两张表，结构更简洁。
+
+---
+
+### **review_stats — 课程评价统计表**
+| 字段名 | 类型 | 约束 | 说明 |
+|--------|------|------|------|
+| review_id | BIGINT | PK→course_reviews.id | 评价 ID |
+| like_count | INT | DEFAULT 0 | 点赞数 |
+| dislike_count | INT | DEFAULT 0 | 点踩数 |
+| net_score | INT | DEFAULT 0 | 赞-踩（可选，便于排序） |
+| last_reacted_at | DATETIME |  | 最近一次点赞/点踩时间 |
+| created_at | DATETIME |  | 创建时间 |
+| updated_at | DATETIME | ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
+
+说明：与 `resource_stats` 风格一致，单行按评价聚合统计，主键 `review_id`。更新 `review_reactions` 时同步该表计数；也可定期校准（离线校对）。
+
+---
+
+### **review_comment_stats — 课程评价评论统计表**
+| 字段名 | 类型 | 约束 | 说明 |
+|--------|------|------|------|
+| comment_id | BIGINT | PK→review_comments.id | 评论 ID |
+| like_count | INT | DEFAULT 0 | 点赞数 |
+| dislike_count | INT | DEFAULT 0 | 点踩数 |
+| net_score | INT | DEFAULT 0 | 赞-踩（可选，便于排序） |
+| last_reacted_at | DATETIME |  | 最近一次点赞/点踩时间 |
+| created_at | DATETIME |  | 创建时间 |
+| updated_at | DATETIME | ON UPDATE CURRENT_TIMESTAMP | 更新时间 |
+
+维护建议：
+- 在应用层以事务同时写入/更新 `*_reactions` 与 `*_stats`，保证一致性；
+- 周期性任务可对 `*_stats` 进行全量/抽样校对（按 COUNT(*) FROM reactions 校验）；
+- 如需按热度排序，优先使用 `net_score` 或加权公式（如 `like_count - 2*dislike_count`）。
+
+---
+
 ## 通知与公告模块
 
 ### **notifications — 用户通知表**

@@ -19,6 +19,10 @@ const Report = require('./Report');
 const ModerationQueue = require('./ModerationQueue');
 const File = require('./File');
 const VerificationCode = require('./VerificationCode');
+const ReviewReaction = require('./ReviewReaction');
+const ReviewCommentReaction = require('./ReviewCommentReaction');
+const ReviewStat = require('./ReviewStat');
+const ReviewCommentStat = require('./ReviewCommentStat');
 
 // 用户关联
 User.hasMany(Enrollment, { foreignKey: 'user_id', as: 'enrollments' });
@@ -32,6 +36,8 @@ User.hasMany(UserAnnouncementRead, { foreignKey: 'user_id', as: 'readAnnouncemen
 User.hasMany(Report, { foreignKey: 'reporter_id', as: 'reports' });
 User.hasMany(ModerationQueue, { foreignKey: 'handled_by', as: 'moderationActions' });
 User.hasMany(File, { foreignKey: 'uploader_id', as: 'uploadedFiles' });
+User.hasMany(ReviewReaction, { foreignKey: 'user_id', as: 'reviewReactions' });
+User.hasMany(ReviewCommentReaction, { foreignKey: 'user_id', as: 'reviewCommentReactions' });
 
 // 课程关联
 Course.hasMany(CourseOffering, { foreignKey: 'course_id', as: 'offerings' });
@@ -69,9 +75,21 @@ CourseReview.belongsTo(User, { foreignKey: 'author_id', as: 'author' });
 CourseReview.belongsTo(Course, { foreignKey: 'course_id', as: 'course' });
 CourseReview.belongsTo(CourseOffering, { foreignKey: 'offering_id', as: 'offering' });
 CourseReview.hasMany(ReviewComment, { foreignKey: 'review_id', as: 'comments' });
+CourseReview.hasMany(ReviewReaction, { foreignKey: 'review_id', as: 'reactions' });
+CourseReview.hasOne(ReviewStat, { foreignKey: 'review_id', as: 'stats' });
 
 ReviewComment.belongsTo(CourseReview, { foreignKey: 'review_id', as: 'review' });
 ReviewComment.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+ReviewComment.hasMany(ReviewCommentReaction, { foreignKey: 'comment_id', as: 'reactions' });
+ReviewComment.hasOne(ReviewCommentStat, { foreignKey: 'comment_id', as: 'stats' });
+
+ReviewReaction.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+ReviewReaction.belongsTo(CourseReview, { foreignKey: 'review_id', as: 'review' });
+ReviewStat.belongsTo(CourseReview, { foreignKey: 'review_id', as: 'review' });
+
+ReviewCommentReaction.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+ReviewCommentReaction.belongsTo(ReviewComment, { foreignKey: 'comment_id', as: 'comment' });
+ReviewCommentStat.belongsTo(ReviewComment, { foreignKey: 'comment_id', as: 'comment' });
 
 // 通知关联
 Notification.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -109,5 +127,9 @@ module.exports = {
   Report,
   ModerationQueue,
   File,
-  VerificationCode
+  VerificationCode,
+  ReviewReaction,
+  ReviewCommentReaction,
+  ReviewStat,
+  ReviewCommentStat
 };
