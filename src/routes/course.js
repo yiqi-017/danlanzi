@@ -319,7 +319,6 @@ router.delete('/courses/:id',
   }
 );
 
-/*
 
 // ==================== 开课实例相关接口 ====================
 
@@ -690,5 +689,5 @@ router.get('/stats', async (req, res) => {
     });
   }
 });
-*/
+
 module.exports = router;
