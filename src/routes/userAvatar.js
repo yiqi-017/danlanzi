@@ -3,11 +3,11 @@ const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
-const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const sharp = require('sharp');
 const { User } = require('../models');
 const { dataPath } = require('../config/datapath');
+const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 
 // 系统头像目录路径
@@ -30,29 +30,6 @@ const upload = multer({
   }
 });
 
-// JWT 验证中间件
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({
-      status: 'error',
-      message: 'Access token required'
-    });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET || 'default_secret_key', (err, user) => {
-    if (err) {
-      return res.status(403).json({
-        status: 'error',
-        message: 'Invalid or expired token'
-      });
-    }
-    req.user = user;
-    next();
-  });
-};
 
 /**
  * 获取系统头像文件列表

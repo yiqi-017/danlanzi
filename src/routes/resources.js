@@ -1,6 +1,6 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const multer = require('multer');
+const { authenticateToken } = require('../middleware/auth');
 const path = require('path');
 const fs = require('fs');
 const { sequelize, Resource, ResourceCourseLink, ResourceStat, ResourceFavorite, ResourceLike } = require('../models');
@@ -49,29 +49,6 @@ const upload = multer({
   }
 });
 
-// JWT 验证中间件（与 userProfile.js 保持一致风格）
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({
-      status: 'error',
-      message: 'Access token required'
-    });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET || 'default_secret_key', (err, user) => {
-    if (err) {
-      return res.status(403).json({
-        status: 'error',
-        message: 'Invalid or expired token'
-      });
-    }
-    req.user = user; // 包含 userId, email, role
-    next();
-  });
-};
 
 // 发布资源（支持 multipart/form-data，文件字段名：file）
 router.post('/', authenticateToken, (req, res, next) => {
