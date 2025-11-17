@@ -155,10 +155,10 @@
 | author_id | BIGINT | FK→users.id | 作者 ID |
 | course_id | BIGINT | FK→courses.id | 课程 ID |
 | offering_id | BIGINT | FK→course_offerings.id | 可空 |
-| rating_overall | TINYINT |  | 综合评分 |
-| rating_difficulty | TINYINT |  | 难度评分 |
-| rating_workload | TINYINT |  | 工作量评分 |
-| rating_teaching | TINYINT |  | 教学质量评分 |
+| rating_overall | TINYINT | 1~5 | 综合评分 |
+| rating_difficulty | TINYINT | 1~5 | 难度评分 |
+| rating_workload | TINYINT | 1~5 | 工作量评分 |
+| rating_teaching | TINYINT | 1~5 | 教学质量评分 |
 | title | VARCHAR(255) |  | 评价标题 |
 | content | TEXT |  | 评价内容 |
 | is_anonymous | BOOL | DEFAULT FALSE | 是否匿名 |
