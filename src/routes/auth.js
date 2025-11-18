@@ -39,6 +39,7 @@ router.post('/register', async (req, res) => {
       email: email,
       student_id: studentIdFromEmail,
       password_hash: passwordHash,
+      security_email: email, // 自动将安全邮箱设置为注册邮箱
       role: 'user',
       status: 'active',
       theme: 'dark',
@@ -136,12 +137,12 @@ router.post('/register', async (req, res) => {
 // 用户登录接口
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { student_id, password } = req.body;
 
     // 查找用户
     const user = await User.findOne({
       where: { 
-        email: email,
+        student_id: student_id,
         status: 'active'
       }
     });
@@ -149,7 +150,7 @@ router.post('/login', async (req, res) => {
     if (!user) {
       return res.status(401).json({
         status: 'error',
-        message: 'Invalid email or password'
+        message: 'Invalid student ID or password'
       });
     }
 
@@ -158,7 +159,7 @@ router.post('/login', async (req, res) => {
     if (!isPasswordValid) {
       return res.status(401).json({
         status: 'error',
-        message: 'Invalid email or password'
+        message: 'Invalid student ID or password'
       });
     }
 
@@ -198,6 +199,153 @@ router.post('/login', async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Login failed',
+      error: error.message
+    });
+  }
+});
+
+// 获取安全邮箱接口（用于重置密码）
+router.post('/get-security-email', async (req, res) => {
+  try {
+    const { student_id } = req.body;
+
+    if (!student_id) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Student ID is required'
+      });
+    }
+
+    // 查找用户
+    const user = await User.findOne({
+      where: { 
+        student_id: student_id,
+        status: 'active'
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Student ID not found'
+      });
+    }
+
+    if (!user.security_email) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Security email not set'
+      });
+    }
+
+    // 返回安全邮箱（部分隐藏）
+    const email = user.security_email;
+    const [localPart, domain] = email.split('@');
+    const maskedEmail = localPart.length > 2 
+      ? localPart.substring(0, 2) + '***' + '@' + domain
+      : '***@' + domain;
+
+    res.json({
+      status: 'success',
+      message: 'Security email retrieved successfully',
+      data: {
+        security_email: user.security_email,
+        masked_email: maskedEmail
+      }
+    });
+
+  } catch (error) {
+    console.error('Get security email failed:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to get security email',
+      error: error.message
+    });
+  }
+});
+
+// 重置密码接口
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { student_id, security_email, verificationCode, newPassword } = req.body;
+
+    // 验证参数
+    if (!student_id || !security_email || !verificationCode || !newPassword) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'All fields are required'
+      });
+    }
+
+    // 查找用户
+    const user = await User.findOne({
+      where: { 
+        student_id: student_id,
+        security_email: security_email,
+        status: 'active'
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'User not found or security email mismatch'
+      });
+    }
+
+    // 验证验证码
+    const verificationCodeRecord = await VerificationCode.findOne({
+      where: {
+        email: security_email,
+        code: verificationCode,
+        type: 'password_reset',
+        isUsed: false,
+        expiresAt: {
+          [require('sequelize').Op.gt]: new Date()
+        }
+      }
+    });
+
+    if (!verificationCodeRecord) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid or expired verification code'
+      });
+    }
+
+    // 验证密码长度
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Password must be at least 6 characters'
+      });
+    }
+
+    // 加密新密码
+    const saltRounds = 12;
+    const passwordHash = await bcrypt.hash(newPassword, saltRounds);
+
+    // 更新密码
+    await user.update({
+      password_hash: passwordHash
+    });
+
+    // 标记验证码为已使用
+    await verificationCodeRecord.update({
+      isUsed: true,
+      usedAt: new Date()
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Password reset successfully'
+    });
+
+  } catch (error) {
+    console.error('Reset password failed:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to reset password',
       error: error.message
     });
   }

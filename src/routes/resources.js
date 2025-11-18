@@ -3,7 +3,7 @@ const multer = require('multer');
 const { authenticateToken, optionalAuthenticateToken } = require('../middleware/auth');
 const path = require('path');
 const fs = require('fs');
-const { sequelize, Resource, ResourceCourseLink, ResourceStat, ResourceFavorite, ResourceLike, CourseOffering, Course } = require('../models');
+const { sequelize, Resource, ResourceCourseLink, ResourceStat, ResourceFavorite, ResourceLike, CourseOffering, Course, User } = require('../models');
 const { Op } = require('sequelize');
 
 const router = express.Router();
@@ -175,13 +175,60 @@ router.post('/', authenticateToken, (req, res, next) => {
 // 获取资源列表（可选认证，登录用户可以看到收藏状态）
 router.get('/', optionalAuthenticateToken, async (req, res) => {
   try {
-    const { page = 1, limit = 20, course_id, offering_id, search } = req.query;
+    const { page = 1, limit = 20, course_id, offering_id, search, uploader_id, favorite } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
     // 构建查询条件
     const whereClause = {
       status: 'normal'
     };
+
+    // 如果指定了uploader_id，筛选发布的资源
+    if (uploader_id) {
+      if (uploader_id === 'current' && req.user && req.user.userId) {
+        // 当前用户发布的资源
+        whereClause.uploader_id = req.user.userId;
+      } else if (!isNaN(parseInt(uploader_id))) {
+        // 指定用户ID发布的资源
+        whereClause.uploader_id = parseInt(uploader_id);
+      }
+    }
+
+    // 如果指定了favorite，筛选收藏的资源（需要用户已登录）
+    let favoriteResourceIds = null;
+    if (favorite === 'true' || favorite === true) {
+      if (!req.user || !req.user.userId) {
+        return res.status(401).json({
+          status: 'error',
+          message: 'Authentication required to view favorited resources'
+        });
+      }
+      // 获取用户收藏的资源ID列表
+      const favorites = await ResourceFavorite.findAll({
+        where: {
+          user_id: req.user.userId
+        },
+        attributes: ['resource_id']
+      });
+      favoriteResourceIds = favorites.map(f => f.resource_id);
+      
+      if (favoriteResourceIds.length === 0) {
+        // 如果没有收藏的资源，直接返回空结果
+        return res.json({
+          status: 'success',
+          message: 'Resources retrieved successfully',
+          data: {
+            resources: [],
+            pagination: {
+              total: 0,
+              page: parseInt(page),
+              limit: parseInt(limit),
+              totalPages: 0
+            }
+          }
+        });
+      }
+    }
 
     // 如果指定了course_id或offering_id，需要通过ResourceCourseLink关联查询
     let resourceIds = null;
@@ -213,6 +260,35 @@ router.get('/', optionalAuthenticateToken, async (req, res) => {
         });
       }
       whereClause.id = { [Op.in]: resourceIds };
+    }
+
+    // 如果指定了收藏筛选，需要合并到resourceIds中
+    if (favoriteResourceIds) {
+      if (whereClause.id) {
+        // 如果已经有resourceIds（比如从course_id筛选），取交集
+        const existingIds = Array.isArray(whereClause.id[Op.in]) 
+          ? whereClause.id[Op.in] 
+          : [whereClause.id[Op.in]];
+        const intersection = existingIds.filter(id => favoriteResourceIds.includes(id));
+        if (intersection.length === 0) {
+          return res.json({
+            status: 'success',
+            message: 'Resources retrieved successfully',
+            data: {
+              resources: [],
+              pagination: {
+                total: 0,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: 0
+              }
+            }
+          });
+        }
+        whereClause.id = { [Op.in]: intersection };
+      } else {
+        whereClause.id = { [Op.in]: favoriteResourceIds };
+      }
     }
 
     // 如果有搜索关键词，需要搜索多个字段
@@ -345,6 +421,12 @@ router.get('/', optionalAuthenticateToken, async (req, res) => {
       offset: offset,
       order: [['created_at', 'DESC']],
           include: [
+            {
+              model: User,
+              as: 'uploader',
+              required: false,
+              attributes: ['id', 'nickname', 'avatar_path']
+            },
             {
               model: ResourceCourseLink,
               as: 'courseLinks',
