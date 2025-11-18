@@ -1,7 +1,8 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const { Announcement } = require('../models');
+const { Op } = require('sequelize');
+const { Announcement, UserAnnouncementRead, sequelize } = require('../models');
 
 const router = express.Router();
 
@@ -29,6 +30,10 @@ const requireAdmin = (req, res, next) => {
   }
   next();
 };
+
+function getUserIdFromReq(req) {
+  return req.user && (req.user.userId || req.user.id);
+}
 
 // 根据当前时间计算状态
 function deriveStatus(startsAt, endsAt, now = new Date()) {
@@ -111,6 +116,61 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('获取公告列表失败:', error);
     return res.status(500).json({ status: 'error', message: 'Failed to retrieve announcements', error: error.message });
+  }
+});
+
+// 获取当前用户未读公告（默认仅 active，可通过 ?status=active|scheduled|ended 指定）
+router.get('/unread', authenticateToken, async (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) {
+      return res.status(401).json({ status: 'error', message: 'Invalid token payload: user id missing' });
+    }
+    const { page = 1, limit = 20, status = 'active' } = req.query;
+    const pageNum = parseInt(page) || 1;
+    const limitNum = Math.min(parseInt(limit) || 20, 100);
+    const offset = (pageNum - 1) * limitNum;
+
+    // 子查询：该用户已读的公告ID
+    const readRows = await UserAnnouncementRead.findAll({
+      attributes: ['announcement_id'],
+      where: { user_id: userId }
+    });
+    const readIds = readRows.map(r => r.announcement_id);
+
+    const where = {};
+    if (status) where.status = status;
+    if (readIds.length > 0) {
+      where.id = { [Op.notIn]: readIds };
+    }
+
+    const { rows, count } = await Announcement.findAndCountAll({
+      where,
+      limit: limitNum,
+      offset,
+      order: [
+        ['priority', 'DESC'],
+        ['starts_at', 'ASC'],
+        ['created_at', 'DESC']
+      ]
+    });
+
+    return res.json({
+      status: 'success',
+      message: 'Unread announcements retrieved successfully',
+      data: {
+        announcements: rows,
+        pagination: {
+          total: count,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(count / limitNum)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('获取未读公告失败:', error);
+    return res.status(500).json({ status: 'error', message: 'Failed to retrieve unread announcements', error: error.message });
   }
 });
 
@@ -263,6 +323,135 @@ router.delete('/:id',
     }
   }
 );
+
+// 标记为已读（幂等）
+router.post('/:id/read', authenticateToken, async (req, res) => {
+  try {
+    const announcementId = parseInt(req.params.id);
+    if (!Number.isFinite(announcementId)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid announcement id' });
+    }
+    const userId = getUserIdFromReq(req);
+    if (!userId) {
+      return res.status(401).json({ status: 'error', message: 'Invalid token payload: user id missing' });
+    }
+
+    const a = await Announcement.findByPk(announcementId);
+    if (!a) {
+      return res.status(404).json({ status: 'error', message: 'Announcement not found' });
+    }
+
+    const [record, created] = await UserAnnouncementRead.findOrCreate({
+      where: { announcement_id: announcementId, user_id: userId },
+      defaults: { announcement_id: announcementId, user_id: userId, read_at: new Date() }
+    });
+
+    return res.status(created ? 201 : 200).json({
+      status: 'success',
+      message: created ? 'Marked as read' : 'Already marked as read',
+      data: { read: true, read_at: record.read_at }
+    });
+  } catch (error) {
+    console.error('标记公告为已读失败:', error);
+    return res.status(500).json({ status: 'error', message: 'Failed to mark as read', error: error.message });
+  }
+});
+
+// 获取当前用户阅读状态
+router.get('/:id/read-status', authenticateToken, async (req, res) => {
+  try {
+    const announcementId = parseInt(req.params.id);
+    if (!Number.isFinite(announcementId)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid announcement id' });
+    }
+    const userId = getUserIdFromReq(req);
+    if (!userId) {
+      return res.status(401).json({ status: 'error', message: 'Invalid token payload: user id missing' });
+    }
+
+    const a = await Announcement.findByPk(announcementId);
+    if (!a) {
+      return res.status(404).json({ status: 'error', message: 'Announcement not found' });
+    }
+
+    const record = await UserAnnouncementRead.findOne({
+      where: { announcement_id: announcementId, user_id: userId }
+    });
+
+    return res.json({
+      status: 'success',
+      message: 'Read status retrieved',
+      data: { read: !!record, read_at: record ? record.read_at : null }
+    });
+  } catch (error) {
+    console.error('获取阅读状态失败:', error);
+    return res.status(500).json({ status: 'error', message: 'Failed to get read status', error: error.message });
+  }
+});
+
+// 获取阅读者列表（管理员）
+router.get('/:id/readers', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const announcementId = parseInt(req.params.id);
+    if (!Number.isFinite(announcementId)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid announcement id' });
+    }
+
+    const a = await Announcement.findByPk(announcementId);
+    if (!a) {
+      return res.status(404).json({ status: 'error', message: 'Announcement not found' });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const offset = (page - 1) * limit;
+
+    const { count, rows } = await UserAnnouncementRead.findAndCountAll({
+      where: { announcement_id: announcementId },
+      order: [['read_at', 'DESC']],
+      limit,
+      offset
+    });
+
+    return res.json({
+      status: 'success',
+      message: 'Readers retrieved successfully',
+      data: {
+        readers: rows,
+        pagination: {
+          total: count,
+          page,
+          limit,
+          totalPages: Math.ceil(count / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('获取阅读者列表失败:', error);
+    return res.status(500).json({ status: 'error', message: 'Failed to get readers', error: error.message });
+  }
+});
+
+// 获取阅读总数
+router.get('/:id/read-count', async (req, res) => {
+  try {
+    const announcementId = parseInt(req.params.id);
+    if (!Number.isFinite(announcementId)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid announcement id' });
+    }
+
+    const a = await Announcement.findByPk(announcementId);
+    if (!a) {
+      return res.status(404).json({ status: 'error', message: 'Announcement not found' });
+    }
+
+    const count = await UserAnnouncementRead.count({ where: { announcement_id: announcementId } });
+    return res.json({ status: 'success', message: 'Read count retrieved', data: { count } });
+  } catch (error) {
+    console.error('获取阅读总数失败:', error);
+    return res.status(500).json({ status: 'error', message: 'Failed to get read count', error: error.message });
+  }
+});
 
 module.exports = router;
 
