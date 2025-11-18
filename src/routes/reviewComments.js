@@ -1,5 +1,4 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const {
   ReviewComment,
@@ -8,24 +7,9 @@ const {
   CourseReview,
   User
 } = require('../models');
+const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
-
-// 鉴权中间件
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) {
-    return res.status(401).json({ status: 'error', message: 'Access token required' });
-  }
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ status: 'error', message: 'Invalid or expired token' });
-    }
-    req.user = user;
-    next();
-  });
-};
 
 function getUserIdFromReq(req) {
   return req.user && (req.user.userId || req.user.id);

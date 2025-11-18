@@ -1,31 +1,7 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const { User } = require('../models');
+const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
-
-// JWT 验证中间件
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({
-      status: 'error',
-      message: 'Access token required'
-    });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET || 'default_secret_key', (err, user) => {
-    if (err) {
-      return res.status(403).json({
-        status: 'error',
-        message: 'Invalid or expired token'
-      });
-    }
-    req.user = user;
-    next();
-  });
-};
 
 // 获取用户信息接口
 router.get('/profile', authenticateToken, async (req, res) => {
