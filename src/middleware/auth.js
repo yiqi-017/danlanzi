@@ -78,8 +78,35 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
+/**
+ * 可选认证中间件
+ * 如果提供了token则验证，否则继续执行（不要求登录）
+ */
+const optionalAuthenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  // 没有提供token，继续执行（不要求登录）
+  if (!token) {
+    return next();
+  }
+
+  // 验证token
+  jwt.verify(token, process.env.JWT_SECRET || 'default_secret_key', (err, decoded) => {
+    if (err) {
+      // Token无效或过期，但不阻止请求，只是不设置req.user
+      return next();
+    }
+
+    // Token验证成功，将用户信息附加到请求对象
+    req.user = decoded;
+    next();
+  });
+};
+
 module.exports = {
   authenticateToken,
-  requireAdmin
+  requireAdmin,
+  optionalAuthenticateToken
 };
 

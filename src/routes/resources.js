@@ -1,9 +1,9 @@
 const express = require('express');
 const multer = require('multer');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, optionalAuthenticateToken } = require('../middleware/auth');
 const path = require('path');
 const fs = require('fs');
-const { sequelize, Resource, ResourceCourseLink, ResourceStat, ResourceFavorite, ResourceLike, CourseOffering } = require('../models');
+const { sequelize, Resource, ResourceCourseLink, ResourceStat, ResourceFavorite, ResourceLike, CourseOffering, Course } = require('../models');
 const { Op } = require('sequelize');
 
 const router = express.Router();
@@ -172,8 +172,8 @@ router.post('/', authenticateToken, (req, res, next) => {
   }
 });
 
-// 获取资源列表
-router.get('/', async (req, res) => {
+// 获取资源列表（可选认证，登录用户可以看到收藏状态）
+router.get('/', optionalAuthenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 20, course_id, offering_id, search } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -182,14 +182,6 @@ router.get('/', async (req, res) => {
     const whereClause = {
       status: 'normal'
     };
-
-    // 如果有搜索关键词
-    if (search) {
-      whereClause[Op.or] = [
-        { title: { [Op.like]: `%${search}%` } },
-        { description: { [Op.like]: `%${search}%` } }
-      ];
-    }
 
     // 如果指定了course_id或offering_id，需要通过ResourceCourseLink关联查询
     let resourceIds = null;
@@ -223,33 +215,186 @@ router.get('/', async (req, res) => {
       whereClause.id = { [Op.in]: resourceIds };
     }
 
+    // 如果有搜索关键词，需要搜索多个字段
+    let searchResourceIds = null;
+    if (search) {
+      const searchTerm = `%${search}%`;
+      const escapedSearch = search.replace(/'/g, "''").replace(/\\/g, '\\\\');
+      
+      // 1. 搜索资源本身的字段（title, description, tags）
+      const resourceSearchIds = await Resource.findAll({
+        where: {
+          status: 'normal',
+          [Op.or]: [
+            { title: { [Op.like]: searchTerm } },
+            { description: { [Op.like]: searchTerm } },
+            sequelize.literal(`JSON_SEARCH(tags, 'one', ${sequelize.escape(escapedSearch)}) IS NOT NULL`)
+          ]
+        },
+        attributes: ['id']
+      });
+      
+      // 2. 搜索关联的课程和开课信息
+      const courseSearchIds = await Course.findAll({
+        where: {
+          [Op.or]: [
+            { name: { [Op.like]: searchTerm } },
+            { dept: { [Op.like]: searchTerm } }
+          ]
+        },
+        attributes: ['id'],
+        include: [{
+          model: CourseOffering,
+          as: 'offerings',
+          required: false,
+          attributes: ['id']
+        }]
+      });
+      
+      // 3. 搜索开课老师
+      const instructorSearchIds = await CourseOffering.findAll({
+        where: sequelize.literal(`(JSON_SEARCH(instructor, 'one', ${sequelize.escape(escapedSearch)}) IS NOT NULL)`),
+        attributes: ['id']
+      });
+      
+      // 收集所有相关的course_id和offering_id
+      const allCourseIds = courseSearchIds.map(c => c.id);
+      const allOfferingIds = new Set();
+      courseSearchIds.forEach(course => {
+        course.offerings?.forEach(offering => {
+          allOfferingIds.add(offering.id);
+        });
+      });
+      instructorSearchIds.forEach(offering => {
+        allOfferingIds.add(offering.id);
+      });
+      
+      // 通过course_id和offering_id查找关联的资源
+      const linkSearchIds = [];
+      
+      if (allCourseIds.length > 0 || allOfferingIds.size > 0) {
+        const linkWhere = {
+          [Op.or]: []
+        };
+        
+        if (allCourseIds.length > 0) {
+          linkWhere[Op.or].push({ course_id: { [Op.in]: allCourseIds } });
+        }
+        if (allOfferingIds.size > 0) {
+          linkWhere[Op.or].push({ offering_id: { [Op.in]: Array.from(allOfferingIds) } });
+        }
+        
+        const links = await ResourceCourseLink.findAll({
+          where: linkWhere,
+          attributes: ['resource_id']
+        });
+        linkSearchIds.push(...links.map(l => l.resource_id));
+      }
+      
+      // 合并所有搜索结果
+      const allSearchIds = new Set();
+      resourceSearchIds.forEach(r => allSearchIds.add(r.id));
+      linkSearchIds.forEach(id => allSearchIds.add(id));
+      
+      searchResourceIds = Array.from(allSearchIds);
+      
+      if (searchResourceIds.length === 0) {
+        // 如果没有搜索结果，直接返回空结果
+        return res.json({
+          status: 'success',
+          message: 'Resources retrieved successfully',
+          data: {
+            resources: [],
+            pagination: {
+              total: 0,
+              page: parseInt(page),
+              limit: parseInt(limit),
+              totalPages: 0
+            }
+          }
+        });
+      }
+      
+      // 如果已经有course_id或offering_id的过滤，需要取交集
+      if (resourceIds) {
+        searchResourceIds = searchResourceIds.filter(id => resourceIds.includes(id));
+        if (searchResourceIds.length === 0) {
+          return res.json({
+            status: 'success',
+            message: 'Resources retrieved successfully',
+            data: {
+              resources: [],
+              pagination: {
+                total: 0,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: 0
+              }
+            }
+          });
+        }
+      }
+      
+      whereClause.id = { [Op.in]: searchResourceIds };
+    }
+
     // 查询资源
     const { count, rows: resources } = await Resource.findAndCountAll({
       where: whereClause,
       limit: parseInt(limit),
       offset: offset,
       order: [['created_at', 'DESC']],
-      include: [
-        {
-          model: ResourceCourseLink,
-          as: 'courseLinks',
-          required: false,
           include: [
             {
-              model: CourseOffering,
-              as: 'offering',
-              required: false
+              model: ResourceCourseLink,
+              as: 'courseLinks',
+              required: false,
+              include: [
+                {
+                  model: CourseOffering,
+                  as: 'offering',
+                  required: false,
+                  include: [
+                    {
+                      model: Course,
+                      as: 'course',
+                      required: false
+                    }
+                  ]
+                }
+              ]
             }
           ]
-        }
-      ]
+    });
+
+    // 如果用户已登录，检查每个资源是否被收藏
+    let favoritedResourceIds = new Set();
+    if (req.user && req.user.userId) {
+      const resourceIds = resources.map(r => r.id);
+      if (resourceIds.length > 0) {
+        const favorites = await ResourceFavorite.findAll({
+          where: {
+            user_id: req.user.userId,
+            resource_id: { [Op.in]: resourceIds }
+          },
+          attributes: ['resource_id']
+        });
+        favoritedResourceIds = new Set(favorites.map(f => f.resource_id));
+      }
+    }
+
+    // 为每个资源添加收藏状态
+    const resourcesWithFavorite = resources.map(resource => {
+      const resourceJson = resource.toJSON();
+      resourceJson.isFavorited = favoritedResourceIds.has(resource.id);
+      return resourceJson;
     });
 
     res.json({
       status: 'success',
       message: 'Resources retrieved successfully',
       data: {
-        resources,
+        resources: resourcesWithFavorite,
         pagination: {
           total: count,
           page: parseInt(page),
@@ -282,22 +427,30 @@ router.post('/:id/favorite', authenticateToken, async (req, res) => {
       return res.status(404).json({ status: 'error', message: '资源不存在' });
     }
 
-    // 创建收藏（若已存在则忽略）
-    await ResourceFavorite.findOrCreate({
-      where: { user_id: req.user.userId, resource_id: resourceId },
-      defaults: { user_id: req.user.userId, resource_id: resourceId }
+    // 检查是否已经收藏
+    const existingFavorite = await ResourceFavorite.findOne({
+      where: { user_id: req.user.userId, resource_id: resourceId }
+    });
+
+    if (existingFavorite) {
+      // 已经收藏，直接返回成功
+      return res.status(200).json({ status: 'success', message: '已收藏' });
+    }
+
+    // 创建收藏
+    await ResourceFavorite.create({
+      user_id: req.user.userId,
+      resource_id: resourceId
+    });
+
+    // 递增收藏数（使用findOrCreate避免重复创建统计记录）
+    const [stat, created] = await ResourceStat.findOrCreate({
+      where: { resource_id: resourceId },
+      defaults: { resource_id: resourceId, favorite_count: 0 }
     });
 
     // 递增收藏数
-    const [affected] = await ResourceStat.increment(
-      { favorite_count: 1 },
-      { where: { resource_id: resourceId } }
-    );
-
-    // 如果统计不存在（理论上会在创建资源时初始化），则创建一条
-    if (!affected || (Array.isArray(affected) && affected[0] === 0)) {
-      await ResourceStat.create({ resource_id: resourceId, favorite_count: 1 });
-    }
+    await stat.increment('favorite_count');
 
     return res.status(200).json({ status: 'success', message: '收藏成功' });
   } catch (error) {
