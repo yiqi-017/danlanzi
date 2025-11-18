@@ -1,9 +1,14 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { Announcement } = require('../models');
+const { Op } = require('sequelize');
+const { Announcement, UserAnnouncementRead } = require('../models');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
+
+function getUserIdFromReq(req) {
+  return req.user && (req.user.userId || req.user.id);
+}
 
 // 根据当前时间计算状态
 function deriveStatus(startsAt, endsAt, now = new Date()) {
