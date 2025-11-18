@@ -27,8 +27,9 @@ const CourseOffering = sequelize.define('CourseOffering', {
     allowNull: true
   },
   instructor: {
-    type: DataTypes.STRING(100),
-    allowNull: true
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: '授课老师，JSON数组格式，如 ["张三", "李四"]'
   },
   schedule_json: {
     type: DataTypes.JSON,
@@ -50,9 +51,7 @@ const CourseOffering = sequelize.define('CourseOffering', {
     {
       fields: ['term']
     },
-    {
-      fields: ['instructor']
-    },
+    // 移除了instructor索引，因为JSON字段不能直接索引
     {
       unique: true,
       fields: ['course_id', 'term', 'section']

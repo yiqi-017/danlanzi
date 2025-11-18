@@ -302,7 +302,11 @@ router.get('/offerings', async (req, res) => {
       whereClause.term = { [Op.like]: `%${term}%` };
     }
     if (instructor) {
-      whereClause.instructor = { [Op.like]: `%${instructor}%` };
+      // instructor现在是JSON数组，需要使用JSON函数查询
+      whereClause[Op.or] = [
+        sequelize.literal(`JSON_CONTAINS(instructor, JSON_QUOTE('${instructor}'))`),
+        sequelize.literal(`JSON_SEARCH(instructor, 'one', '%${instructor}%') IS NOT NULL`)
+      ];
     }
 
     const { count, rows: offerings } = await CourseOffering.findAndCountAll({
@@ -386,7 +390,13 @@ router.post('/offerings',
     body('course_id').isInt().withMessage('Course ID must be an integer'),
     body('term').notEmpty().withMessage('Term is required'),
     body('section').optional().isString(),
-    body('instructor').optional().isString(),
+    body('instructor').optional().custom((value) => {
+      // 支持字符串或字符串数组
+      if (typeof value === 'string' || Array.isArray(value)) {
+        return true;
+      }
+      throw new Error('Instructor must be a string or an array of strings');
+    }),
     body('schedule_json').optional().isObject(),
     body('extra_info').optional().isString()
   ],
@@ -413,6 +423,19 @@ router.post('/offerings',
         });
       }
 
+      // 处理instructor：如果是字符串，转换为数组；如果是数组，过滤空值
+      let instructorArray = null;
+      if (instructor) {
+        if (typeof instructor === 'string') {
+          instructorArray = instructor.trim() ? [instructor.trim()] : null;
+        } else if (Array.isArray(instructor)) {
+          instructorArray = instructor.filter(i => i && typeof i === 'string' && i.trim()).map(i => i.trim());
+          if (instructorArray.length === 0) {
+            instructorArray = null;
+          }
+        }
+      }
+
       // 检查同一课程、学期、班号的组合是否已存在
       const existingOffering = await CourseOffering.findOne({
         where: {
@@ -434,7 +457,7 @@ router.post('/offerings',
         course_id,
         term,
         section,
-        instructor,
+        instructor: instructorArray,
         schedule_json,
         extra_info
       });

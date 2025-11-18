@@ -3,7 +3,8 @@ const multer = require('multer');
 const { authenticateToken } = require('../middleware/auth');
 const path = require('path');
 const fs = require('fs');
-const { sequelize, Resource, ResourceCourseLink, ResourceStat, ResourceFavorite, ResourceLike } = require('../models');
+const { sequelize, Resource, ResourceCourseLink, ResourceStat, ResourceFavorite, ResourceLike, CourseOffering } = require('../models');
+const { Op } = require('sequelize');
 
 const router = express.Router();
 
@@ -166,6 +167,102 @@ router.post('/', authenticateToken, (req, res, next) => {
     return res.status(500).json({
       status: 'error',
       message: 'Failed to create resource',
+      error: error.message
+    });
+  }
+});
+
+// 获取资源列表
+router.get('/', async (req, res) => {
+  try {
+    const { page = 1, limit = 20, course_id, offering_id, search } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    // 构建查询条件
+    const whereClause = {
+      status: 'normal'
+    };
+
+    // 如果有搜索关键词
+    if (search) {
+      whereClause[Op.or] = [
+        { title: { [Op.like]: `%${search}%` } },
+        { description: { [Op.like]: `%${search}%` } }
+      ];
+    }
+
+    // 如果指定了course_id或offering_id，需要通过ResourceCourseLink关联查询
+    let resourceIds = null;
+    if (course_id || offering_id) {
+      const linkWhere = {};
+      if (course_id) linkWhere.course_id = course_id;
+      if (offering_id) linkWhere.offering_id = offering_id;
+
+      const links = await ResourceCourseLink.findAll({
+        where: linkWhere,
+        attributes: ['resource_id']
+      });
+      resourceIds = links.map(link => link.resource_id);
+      
+      if (resourceIds.length === 0) {
+        // 如果没有关联的资源，直接返回空结果
+        return res.json({
+          status: 'success',
+          message: 'Resources retrieved successfully',
+          data: {
+            resources: [],
+            pagination: {
+              total: 0,
+              page: parseInt(page),
+              limit: parseInt(limit),
+              totalPages: 0
+            }
+          }
+        });
+      }
+      whereClause.id = { [Op.in]: resourceIds };
+    }
+
+    // 查询资源
+    const { count, rows: resources } = await Resource.findAndCountAll({
+      where: whereClause,
+      limit: parseInt(limit),
+      offset: offset,
+      order: [['created_at', 'DESC']],
+      include: [
+        {
+          model: ResourceCourseLink,
+          as: 'courseLinks',
+          required: false,
+          include: [
+            {
+              model: CourseOffering,
+              as: 'offering',
+              required: false
+            }
+          ]
+        }
+      ]
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Resources retrieved successfully',
+      data: {
+        resources,
+        pagination: {
+          total: count,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalPages: Math.ceil(count / parseInt(limit))
+        }
+      }
+    });
+  } catch (error) {
+    console.error('获取资源列表失败:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve resources',
       error: error.message
     });
   }
