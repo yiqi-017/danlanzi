@@ -445,12 +445,18 @@ router.get('/', optionalAuthenticateToken, async (req, res) => {
                   ]
                 }
               ]
+            },
+            {
+              model: ResourceStat,
+              as: 'stats',
+              required: false
             }
           ]
     });
 
-    // 如果用户已登录，检查每个资源是否被收藏
+    // 如果用户已登录，检查每个资源是否被收藏和点赞
     let favoritedResourceIds = new Set();
+    let likedResourceIds = new Set();
     if (req.user && req.user.userId) {
       const resourceIds = resources.map(r => r.id);
       if (resourceIds.length > 0) {
@@ -462,13 +468,32 @@ router.get('/', optionalAuthenticateToken, async (req, res) => {
           attributes: ['resource_id']
         });
         favoritedResourceIds = new Set(favorites.map(f => f.resource_id));
+
+        const likes = await ResourceLike.findAll({
+          where: {
+            user_id: req.user.userId,
+            resource_id: { [Op.in]: resourceIds }
+          },
+          attributes: ['resource_id']
+        });
+        likedResourceIds = new Set(likes.map(l => l.resource_id));
       }
     }
 
-    // 为每个资源添加收藏状态
+    // 为每个资源添加收藏状态和点赞状态
     const resourcesWithFavorite = resources.map(resource => {
       const resourceJson = resource.toJSON();
       resourceJson.isFavorited = favoritedResourceIds.has(resource.id);
+      resourceJson.isLiked = likedResourceIds.has(resource.id);
+      // 确保stats存在，如果不存在则提供默认值
+      if (!resourceJson.stats) {
+        resourceJson.stats = {
+          favorite_count: 0,
+          like_count: 0,
+          download_count: 0,
+          view_count: 0
+        };
+      }
       return resourceJson;
     });
 

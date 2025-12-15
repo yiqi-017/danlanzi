@@ -7,7 +7,8 @@ const {
   CourseReview,
   User
 } = require('../models');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, optionalAuthenticateToken } = require('../middleware/auth');
+const { Op } = require('sequelize');
 
 const router = express.Router();
 
@@ -30,7 +31,7 @@ async function ensureCommentStatExists(commentId) {
 }
 
 // 列表（按 review_id）
-router.get('/', async (req, res) => {
+router.get('/', optionalAuthenticateToken, async (req, res) => {
   try {
     const { review_id, page = 1, limit = 20 } = req.query;
     if (!review_id) {
@@ -52,11 +53,45 @@ router.get('/', async (req, res) => {
       ]
     });
 
+    // 如果用户已登录，检查每个评论的用户反应状态
+    let userReactions = new Map();
+    if (req.user && req.user.userId) {
+      const commentIds = rows.map(c => c.id);
+      if (commentIds.length > 0) {
+        const reactions = await ReviewCommentReaction.findAll({
+          where: {
+            user_id: req.user.userId,
+            comment_id: { [Op.in]: commentIds }
+          },
+          attributes: ['comment_id', 'reaction']
+        });
+        reactions.forEach(r => {
+          userReactions.set(r.comment_id, r.reaction);
+        });
+      }
+    }
+
+    // 为每个评论添加用户反应状态
+    const commentsWithReactions = rows.map(comment => {
+      const commentJson = comment.toJSON();
+      const userReaction = userReactions.get(comment.id);
+      commentJson.userReaction = userReaction || null;
+      // 确保stats存在
+      if (!commentJson.stats) {
+        commentJson.stats = {
+          like_count: 0,
+          dislike_count: 0,
+          net_score: 0
+        };
+      }
+      return commentJson;
+    });
+
     return res.json({
       status: 'success',
       message: 'Comments retrieved successfully',
       data: {
-        comments: rows,
+        comments: commentsWithReactions,
         pagination: {
           total: count,
           page: pageNum,

@@ -5,9 +5,11 @@ const {
   CourseReview,
   ReviewReaction,
   ReviewStat,
-  User
+  User,
+  Course,
+  CourseOffering
 } = require('../models');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { authenticateToken, requireAdmin, optionalAuthenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -30,7 +32,7 @@ async function ensureReviewStatExists(reviewId) {
 }
 
 // 列表
-router.get('/', async (req, res) => {
+router.get('/', optionalAuthenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 20, course_id, offering_id, author_id, status, search } = req.query;
     const pageNum = parseInt(page) || 1;
@@ -56,15 +58,58 @@ router.get('/', async (req, res) => {
       order: [['created_at', 'DESC']],
       include: [
         { model: User, as: 'author', attributes: ['id', 'nickname', 'avatar_path', 'role'] },
-        { model: ReviewStat, as: 'stats' }
+        { model: ReviewStat, as: 'stats' },
+        { model: Course, as: 'course', attributes: ['id', 'name', 'dept'] },
+        { 
+          model: CourseOffering, 
+          as: 'offering', 
+          attributes: ['id', 'course_id', 'term', 'section', 'instructor'],
+          include: [
+            { model: Course, as: 'course', attributes: ['id', 'name', 'dept'] }
+          ]
+        }
       ]
+    });
+
+    // 如果用户已登录，检查每个课评的用户反应状态
+    let userReactions = new Map();
+    if (req.user && req.user.userId) {
+      const reviewIds = rows.map(r => r.id);
+      if (reviewIds.length > 0) {
+        const reactions = await ReviewReaction.findAll({
+          where: {
+            user_id: req.user.userId,
+            review_id: { [Op.in]: reviewIds }
+          },
+          attributes: ['review_id', 'reaction']
+        });
+        reactions.forEach(r => {
+          userReactions.set(r.review_id, r.reaction);
+        });
+      }
+    }
+
+    // 为每个课评添加用户反应状态
+    const reviewsWithReactions = rows.map(review => {
+      const reviewJson = review.toJSON();
+      const userReaction = userReactions.get(review.id);
+      reviewJson.userReaction = userReaction || null;
+      // 确保stats存在
+      if (!reviewJson.stats) {
+        reviewJson.stats = {
+          like_count: 0,
+          dislike_count: 0,
+          net_score: 0
+        };
+      }
+      return reviewJson;
     });
 
     return res.json({
       status: 'success',
       message: 'Reviews retrieved successfully',
       data: {
-        reviews: rows,
+        reviews: reviewsWithReactions,
         pagination: {
           total: count,
           page: pageNum,
@@ -80,22 +125,58 @@ router.get('/', async (req, res) => {
 });
 
 // 详情
-router.get('/:id', async (req, res) => {
+router.get('/:id', optionalAuthenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const review = await CourseReview.findByPk(id, {
       include: [
         { model: User, as: 'author', attributes: ['id', 'nickname', 'avatar_path', 'role'] },
-        { model: ReviewStat, as: 'stats' }
+        { model: ReviewStat, as: 'stats' },
+        { model: Course, as: 'course', attributes: ['id', 'name', 'dept'] },
+        { 
+          model: CourseOffering, 
+          as: 'offering', 
+          attributes: ['id', 'course_id', 'term', 'section', 'instructor'],
+          include: [
+            { model: Course, as: 'course', attributes: ['id', 'name', 'dept'] }
+          ]
+        }
       ]
     });
     if (!review) {
       return res.status(404).json({ status: 'error', message: 'Review not found' });
     }
+
+    // 如果用户已登录，检查用户反应状态
+    let userReaction = null;
+    if (req.user && req.user.userId) {
+      const reaction = await ReviewReaction.findOne({
+        where: {
+          user_id: req.user.userId,
+          review_id: id
+        },
+        attributes: ['reaction']
+      });
+      if (reaction) {
+        userReaction = reaction.reaction;
+      }
+    }
+
+    const reviewJson = review.toJSON();
+    reviewJson.userReaction = userReaction;
+    // 确保stats存在
+    if (!reviewJson.stats) {
+      reviewJson.stats = {
+        like_count: 0,
+        dislike_count: 0,
+        net_score: 0
+      };
+    }
+
     return res.json({
       status: 'success',
       message: 'Review retrieved successfully',
-      data: { review }
+      data: { review: reviewJson }
     });
   } catch (error) {
     console.error('获取课程评价失败:', error);
