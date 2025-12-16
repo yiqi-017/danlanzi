@@ -18,6 +18,7 @@ const reviewsRoutes = require('./routes/reviews');
 const reviewCommentsRoutes = require('./routes/reviewComments');
 const resourceCommentsRoutes = require('./routes/resourceComments');
 const moderationRoutes = require('./routes/moderation');
+const notificationsRoutes = require('./routes/notifications');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -47,6 +48,7 @@ app.use('/api/reviews', reviewsRoutes);
 app.use('/api/reviewComments', reviewCommentsRoutes);
 app.use('/api/resourceComments', resourceCommentsRoutes);
 app.use('/api/moderation', moderationRoutes);
+app.use('/api/notifications', notificationsRoutes);
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
