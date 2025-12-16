@@ -39,7 +39,7 @@ const Resource = sequelize.define('Resource', {
     defaultValue: 'public'
   },
   status: {
-    type: DataTypes.ENUM('normal', 'blocked', 'deleted'),
+    type: DataTypes.ENUM('normal', 'blocked', 'deleted', 'hidden'),
     defaultValue: 'normal'
   },
   tags: {

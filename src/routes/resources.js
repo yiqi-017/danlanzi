@@ -179,19 +179,26 @@ router.get('/', optionalAuthenticateToken, async (req, res) => {
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
     // 构建查询条件
-    const whereClause = {
-      status: 'normal'
-    };
-
+    let whereClause = {};
+    
     // 如果指定了uploader_id，筛选发布的资源
     if (uploader_id) {
       if (uploader_id === 'current' && req.user && req.user.userId) {
-        // 当前用户发布的资源
-        whereClause.uploader_id = req.user.userId;
+        // 当前用户发布的资源：可以看到自己的normal和hidden资源
+        whereClause = {
+          uploader_id: req.user.userId,
+          status: { [Op.in]: ['normal', 'hidden'] }
+        };
       } else if (!isNaN(parseInt(uploader_id))) {
-        // 指定用户ID发布的资源
-        whereClause.uploader_id = parseInt(uploader_id);
+        // 指定用户ID发布的资源：只能看到normal
+        whereClause = {
+          uploader_id: parseInt(uploader_id),
+          status: 'normal'
+        };
       }
+    } else {
+      // 没有指定uploader_id：只显示normal资源
+      whereClause.status = 'normal';
     }
 
     // 如果指定了favorite，筛选收藏的资源（需要用户已登录）
@@ -717,6 +724,187 @@ router.get('/:id/download', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Download resource failed:', error);
     return res.status(500).json({ status: 'error', message: '下载失败', error: error.message });
+  }
+});
+
+// 更新资源
+router.put('/:id', authenticateToken, (req, res, next) => {
+  // 如果是 multipart/form-data，使用 multer 处理（不管是否有文件）
+  if (req.headers['content-type']?.includes('multipart/form-data')) {
+    upload.single('file')(req, res, (err) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ status: 'error', message: '文件大小不能超过 20MB' });
+        }
+        return res.status(400).json({ status: 'error', message: '文件上传失败: ' + err.message });
+      }
+      next();
+    });
+  } else {
+    next();
+  }
+}, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.userId;
+    
+    // 查找资源
+    const resource = await Resource.findByPk(id);
+    if (!resource) {
+      return res.status(404).json({ status: 'error', message: 'Resource not found' });
+    }
+    
+    // 检查权限：只有资源发布者可以编辑
+    if (resource.uploader_id !== userId) {
+      return res.status(403).json({ status: 'error', message: 'You can only edit your own resources' });
+    }
+    
+    const {
+      type,
+      title,
+      description = '',
+      url_or_path = '',
+      visibility = 'public',
+      course_id = null,
+      offering_id = null,
+      tags = null
+    } = req.body || {};
+    
+    // 处理tags
+    let tagsArray = null;
+    if (tags) {
+      if (typeof tags === 'string') {
+        try {
+          tagsArray = JSON.parse(tags);
+        } catch (e) {
+          tagsArray = [tags.trim()].filter(t => t);
+        }
+      } else if (Array.isArray(tags)) {
+        tagsArray = tags.filter(t => t && typeof t === 'string' && t.trim()).map(t => t.trim());
+      }
+      if (tagsArray && tagsArray.length === 0) {
+        tagsArray = null;
+      }
+    }
+    
+    // 基本校验
+    const allowedTypes = ['file', 'link', 'note'];
+    const allowedVisibility = ['public', 'course', 'private'];
+    
+    if (type && !allowedTypes.includes(type)) {
+      return res.status(400).json({ status: 'error', message: 'type 必须是 file/link/note' });
+    }
+    if (title && (typeof title !== 'string' || title.trim().length === 0)) {
+      return res.status(400).json({ status: 'error', message: 'title 必填' });
+    }
+    if (visibility && !allowedVisibility.includes(visibility)) {
+      return res.status(400).json({ status: 'error', message: 'visibility 必须是 public/course/private' });
+    }
+    
+    // 构建更新数据
+    const updateData = {};
+    if (type) updateData.type = type;
+    if (title) updateData.title = title.trim();
+    if (description !== undefined) updateData.description = description;
+    if (visibility) updateData.visibility = visibility;
+    if (tagsArray !== undefined) updateData.tags = tagsArray;
+    
+    // 处理文件上传
+    if (type === 'file' && req.file) {
+      // 删除旧文件（如果存在）
+      if (resource.url_or_path && resource.type === 'file') {
+        const oldFilePath = path.join(USER_BASE_DIR, resource.url_or_path);
+        if (fs.existsSync(oldFilePath)) {
+          try {
+            fs.unlinkSync(oldFilePath);
+          } catch (err) {
+            console.error('Failed to delete old file:', err);
+          }
+        }
+      }
+      updateData.url_or_path = path.join('user', String(userId), RESOURCES_SUB_DIR, req.file.filename).replace(/\\/g, '/');
+    } else if (type === 'link' && url_or_path) {
+      updateData.url_or_path = url_or_path.trim();
+    } else if (type === 'note') {
+      updateData.url_or_path = (url_or_path || '').trim();
+    }
+    
+    // 如果资源之前是隐藏状态，编辑后保持隐藏状态并进入待复核队列
+    const wasHidden = resource.status === 'hidden';
+    if (wasHidden) {
+      // 保持隐藏状态
+      updateData.status = 'hidden';
+    }
+    
+    // 添加调试日志
+    console.log('Update resource - before update:', {
+      id,
+      updateData,
+      currentDescription: resource.description
+    });
+    
+    // 更新资源
+    await resource.update(updateData);
+    
+    // 添加调试日志
+    console.log('Update resource - after update:', {
+      id,
+      newDescription: resource.description
+    });
+    
+    // 更新课程关联
+    if (course_id !== null || offering_id !== null) {
+      // 删除旧关联
+      await ResourceCourseLink.destroy({
+        where: { resource_id: id }
+      });
+      // 创建新关联
+      if (course_id || offering_id) {
+        await ResourceCourseLink.create({
+          resource_id: id,
+          course_id: course_id || null,
+          offering_id: offering_id || null
+        });
+      }
+    }
+    
+    // 如果资源之前是隐藏状态，编辑后需要进入审核队列
+    if (wasHidden) {
+      const { updateOrCreateModerationQueue } = require('./moderation');
+      await updateOrCreateModerationQueue('resource', id, 0);
+      // 设置审核队列状态为 pending_review
+      const { ModerationQueue } = require('../models');
+      const moderationItem = await ModerationQueue.findOne({
+        where: {
+          entity_type: 'resource',
+          entity_id: id
+        }
+      });
+      if (moderationItem) {
+        await moderationItem.update({ status: 'pending_review' });
+      }
+    }
+    
+    // 重新加载资源以获取最新数据
+    await resource.reload();
+    
+    console.log('Update resource - after reload:', {
+      id,
+      finalDescription: resource.description
+    });
+    
+    return res.json({
+      status: 'success',
+      message: 'Resource updated successfully',
+      data: resource
+    });
+  } catch (error) {
+    console.error('Update resource failed:', error);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to update resource',
+      error: error.message
+    });
   }
 });
 

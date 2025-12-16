@@ -57,8 +57,9 @@ const authenticateToken = (req, res, next) => {
 /**
  * 管理员权限验证中间件
  * 必须在 authenticateToken 之后使用
+ * 会从数据库重新查询用户角色，确保角色信息是最新的
  */
-const requireAdmin = (req, res, next) => {
+const requireAdmin = async (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({
       status: 'error',
@@ -67,15 +68,49 @@ const requireAdmin = (req, res, next) => {
     });
   }
 
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({
+  try {
+    // 从数据库重新查询用户角色，确保角色信息是最新的
+    const { User } = require('../models');
+    const userId = req.user.userId || req.user.id;
+    const user = await User.findByPk(userId, {
+      attributes: ['id', 'role', 'status']
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'User not found',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+
+    if (user.status !== 'active') {
+      return res.status(403).json({
+        status: 'error',
+        message: 'User account is not active',
+        code: 'USER_INACTIVE'
+      });
+    }
+
+    if (user.role !== 'admin') {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Admin privileges required',
+        code: 'ADMIN_REQUIRED'
+      });
+    }
+
+    // 更新 req.user 中的 role，确保后续使用最新的角色信息
+    req.user.role = user.role;
+    next();
+  } catch (error) {
+    console.error('Admin check failed:', error);
+    return res.status(500).json({
       status: 'error',
-      message: 'Admin privileges required',
-      code: 'ADMIN_REQUIRED'
+      message: 'Failed to verify admin privileges',
+      code: 'ADMIN_CHECK_FAILED'
     });
   }
-
-  next();
 };
 
 /**

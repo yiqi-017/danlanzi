@@ -8,7 +8,7 @@ const ModerationQueue = sequelize.define('ModerationQueue', {
     autoIncrement: true
   },
   entity_type: {
-    type: DataTypes.ENUM('resource', 'review', 'comment'),
+    type: DataTypes.ENUM('resource', 'review', 'resource_comment', 'review_comment'),
     allowNull: false
   },
   entity_id: {
@@ -23,7 +23,7 @@ const ModerationQueue = sequelize.define('ModerationQueue', {
     }
   },
   status: {
-    type: DataTypes.ENUM('pending', 'approved', 'rejected', 'removed'),
+    type: DataTypes.ENUM('pending', 'approved', 'rejected', 'removed', 'pending_review'),
     defaultValue: 'pending'
   },
   handled_by: {

@@ -16,7 +16,7 @@ const Report = sequelize.define('Report', {
     }
   },
   entity_type: {
-    type: DataTypes.ENUM('resource', 'review', 'comment'),
+    type: DataTypes.ENUM('resource', 'review', 'resource_comment', 'review_comment'),
     allowNull: false
   },
   entity_id: {

@@ -43,7 +43,12 @@ router.get('/', optionalAuthenticateToken, async (req, res) => {
     if (course_id) where.course_id = course_id;
     if (offering_id) where.offering_id = offering_id;
     if (author_id) where.author_id = author_id;
-    if (status) where.status = status;
+    // 如果明确指定了status，使用指定的status；否则默认过滤掉deleted状态
+    if (status) {
+      where.status = status;
+    } else {
+      where.status = { [Op.ne]: 'deleted' };
+    }
     if (search) {
       where[Op.or] = [
         { title: { [Op.like]: `%${search}%` } },

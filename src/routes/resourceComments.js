@@ -42,7 +42,10 @@ router.get('/', optionalAuthenticateToken, async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     const { rows, count } = await ResourceComment.findAndCountAll({
-      where: { resource_id },
+      where: { 
+        resource_id,
+        status: { [Op.ne]: 'deleted' } // 过滤掉已删除的评论
+      },
       limit: limitNum,
       offset,
       order: [['created_at', 'ASC']],
