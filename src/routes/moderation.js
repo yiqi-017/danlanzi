@@ -18,6 +18,7 @@ const {
   CourseOffering
 } = require('../models');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { createNotification, createNotifications } = require('../utils/notificationHelper');
 
 const router = express.Router();
 
@@ -142,9 +143,9 @@ router.post('/reports',
         });
       } else if (entity_type === 'resource_comment') {
         // 资源评论
-        entity = await ResourceComment.findByPk(entity_id, {
-          attributes: ['id', 'status']
-        });
+          entity = await ResourceComment.findByPk(entity_id, {
+            attributes: ['id', 'status']
+          });
       } else {
         return res.status(400).json({ status: 'error', message: 'Invalid entity_type' });
       }
@@ -179,6 +180,8 @@ router.post('/reports',
       }
 
       // 检查用户是否已经有待处理的举报
+      // 但是，如果审核队列中没有这个资源，说明之前的举报可能已经被处理或删除
+      // 在这种情况下，允许再次举报
       const existingReport = await Report.findOne({
         where: {
           reporter_id: userId,
@@ -189,10 +192,16 @@ router.post('/reports',
       });
 
       if (existingReport) {
+        // 如果审核队列中存在这个资源，说明确实在审核中，不允许重复举报
+        if (existingModerationItem) {
         return res.status(400).json({ 
           status: 'error', 
           message: 'You have already reported this item and it is pending review' 
         });
+        }
+        // 如果审核队列中不存在，说明之前的举报可能已经被处理或删除
+        // 将旧的pending举报标记为handled，允许创建新的举报
+        await existingReport.update({ status: 'handled' });
       }
 
       // 创建举报记录
@@ -211,6 +220,21 @@ router.post('/reports',
       console.log('准备更新审核队列:', { entity_type, entity_id });
       await updateOrCreateModerationQueue(entity_type, entity_id, 1);
       console.log('审核队列更新成功');
+
+      // 给举报者发送通知
+      const entityTypeName = entity_type === 'resource' ? '资源'
+        : entity_type === 'review' ? '课评'
+        : entity_type === 'resource_comment' ? '资源评论'
+        : '课评回复';
+      
+      await createNotification({
+        user_id: userId,
+        type: 'system',
+        title: '举报已提交',
+        content: `你举报的${entityTypeName}已提交，我们会尽快处理`,
+        entity_type,
+        entity_id
+      });
 
       return res.status(201).json({
         status: 'success',
@@ -575,13 +599,14 @@ router.put('/moderation-queue/:id/handle',
       await item.update(updateData);
 
       // 根据处理结果更新实体状态
+      let entity = null;
       const EntityModel = getEntityModel(item.entity_type);
       if (EntityModel) {
-        const entity = await EntityModel.findByPk(item.entity_id);
+        entity = await EntityModel.findByPk(item.entity_id);
         if (entity) {
           if (status === 'removed') {
             // 删除：设置实体状态为 deleted
-            await entity.update({ status: 'deleted' });
+              await entity.update({ status: 'deleted' });
           } else if (status === 'approved') {
             if (item.entity_type === 'resource') {
               if (action === 'hide') {
@@ -600,6 +625,16 @@ router.put('/moderation-queue/:id/handle',
 
       // 如果状态为 approved, rejected, removed，将所有相关举报标记为已处理
       if (status !== 'pending' && status !== 'pending_review') {
+        // 获取所有相关举报
+        const reports = await Report.findAll({
+          where: {
+            entity_type: item.entity_type,
+            entity_id: item.entity_id,
+            status: 'pending'
+          }
+        });
+
+        // 标记举报为已处理
         await Report.update(
           { status: 'handled' },
           {
@@ -610,6 +645,56 @@ router.put('/moderation-queue/:id/handle',
             }
           }
         );
+
+        // 通知所有举报者
+        const reporterIds = [...new Set(reports.map(r => r.reporter_id))];
+        if (reporterIds.length > 0) {
+          const notifications = reporterIds.map(reporterId => ({
+            user_id: reporterId,
+            type: 'system',
+            title: '你的举报已处理',
+            content: status === 'removed' 
+              ? '你举报的内容已被删除'
+              : status === 'approved' && action === 'hide'
+              ? '你举报的内容已被隐藏'
+              : '你举报的内容已处理',
+            entity_type: item.entity_type,
+            entity_id: item.entity_id
+          }));
+          await createNotifications(notifications);
+        }
+
+        // 通知内容创建者（如果内容被删除或隐藏）
+        if (status === 'removed' || (status === 'approved' && action === 'hide')) {
+          let contentOwnerId = null;
+          if (item.entity_type === 'resource' && entity) {
+            contentOwnerId = entity.uploader_id;
+          } else if (item.entity_type === 'review' && entity) {
+            contentOwnerId = entity.author_id;
+          } else if ((item.entity_type === 'resource_comment' || item.entity_type === 'review_comment') && entity) {
+            contentOwnerId = entity.user_id;
+          }
+
+          if (contentOwnerId) {
+            const entityTypeName = item.entity_type === 'resource' ? '资源'
+              : item.entity_type === 'review' ? '课评'
+              : item.entity_type === 'resource_comment' ? '资源评论'
+              : '课评评论';
+            
+            await createNotification({
+              user_id: contentOwnerId,
+              type: item.entity_type === 'resource' ? 'resource'
+                : item.entity_type === 'review' ? 'review'
+                : 'comment',
+              title: status === 'removed' ? `你的${entityTypeName}已被删除` : `你的${entityTypeName}已被隐藏`,
+              content: status === 'removed' 
+                ? `你的${entityTypeName}因被举报违规已被删除`
+                : `你的${entityTypeName}因被举报违规已被隐藏`,
+              entity_type: item.entity_type,
+              entity_id: item.entity_id
+            });
+          }
+        }
       }
 
       return res.json({
@@ -823,7 +908,7 @@ router.get('/moderation-queue/:id',
           });
         } else if (item.entity_type === 'review_comment') {
           // 课评评论
-          entity = await ReviewComment.findByPk(item.entity_id, {
+              entity = await ReviewComment.findByPk(item.entity_id, {
                 include: [
                   {
                     model: User,
@@ -867,7 +952,7 @@ router.get('/moderation-queue/:id',
                     required: false
                   }
                 ]
-          });
+              });
           
           // 计算楼层号
           if (entity) {
@@ -883,7 +968,7 @@ router.get('/moderation-queue/:id',
           }
         } else if (item.entity_type === 'resource_comment') {
           // 资源评论
-          entity = await ResourceComment.findByPk(item.entity_id, {
+                entity = await ResourceComment.findByPk(item.entity_id, {
                   include: [
                     {
                       model: User,

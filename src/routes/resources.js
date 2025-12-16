@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { sequelize, Resource, ResourceCourseLink, ResourceStat, ResourceFavorite, ResourceLike, CourseOffering, Course, User } = require('../models');
 const { Op } = require('sequelize');
+const { createNotification } = require('../utils/notificationHelper');
 
 const router = express.Router();
 
@@ -566,6 +567,18 @@ router.post('/:id/favorite', authenticateToken, async (req, res) => {
     // 递增收藏数
     await stat.increment('favorite_count');
 
+    // 通知资源上传者
+    if (resource.uploader_id !== req.user.userId) {
+      await createNotification({
+        user_id: resource.uploader_id,
+        type: 'resource',
+        title: '你的资源被收藏了',
+        content: `用户收藏了你的资源「${resource.title || '未命名资源'}」`,
+        entity_type: 'resource',
+        entity_id: resourceId
+      });
+    }
+
     return res.status(200).json({ status: 'success', message: '收藏成功' });
   } catch (error) {
     console.error('Favorite resource failed:', error);
@@ -632,6 +645,18 @@ router.post('/:id/like', authenticateToken, async (req, res) => {
     );
     if (!affected || (Array.isArray(affected) && affected[0] === 0)) {
       await ResourceStat.create({ resource_id: resourceId, like_count: 1 });
+    }
+
+    // 通知资源上传者
+    if (resource.uploader_id !== req.user.userId) {
+      await createNotification({
+        user_id: resource.uploader_id,
+        type: 'resource',
+        title: '你的资源被点赞了',
+        content: `用户点赞了你的资源「${resource.title || '未命名资源'}」`,
+        entity_type: 'resource',
+        entity_id: resourceId
+      });
     }
 
     return res.status(200).json({ status: 'success', message: '点赞成功' });

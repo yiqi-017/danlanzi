@@ -1,8 +1,9 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { Op } = require('sequelize');
-const { Announcement, UserAnnouncementRead } = require('../models');
+const { Announcement, UserAnnouncementRead, User } = require('../models');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { createNotifications } = require('../utils/notificationHelper');
 
 const router = express.Router();
 
@@ -216,6 +217,26 @@ router.post('/',
         status: deriveStatus(starts_at, ends_at),
         created_by: creatorUserId
       });
+
+      // 如果公告状态是active，通知所有用户
+      if (announcement.status === 'active') {
+        const allUsers = await User.findAll({
+          attributes: ['id'],
+          where: { status: 'active' }
+        });
+        
+        if (allUsers.length > 0) {
+          const notifications = allUsers.map(user => ({
+            user_id: user.id,
+            type: 'announcement',
+            title: announcement.title,
+            content: announcement.content || null,
+            entity_type: 'announcement',
+            entity_id: announcement.id
+          }));
+          await createNotifications(notifications);
+        }
+      }
 
       return res.status(201).json({
         status: 'success',

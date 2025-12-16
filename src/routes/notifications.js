@@ -129,7 +129,7 @@ router.get('/',
         return res.status(401).json({ status: 'error', message: 'Invalid token payload: user id missing' });
       }
 
-      const { page = 1, limit = 20, is_read, type } = req.query;
+      const { page = 1, limit = 20, is_read, type, exclude_type } = req.query;
       const pageNum = parseInt(page) || 1;
       const limitNum = Math.min(parseInt(limit) || 20, 100);
       const offset = (pageNum - 1) * limitNum;
@@ -138,7 +138,10 @@ router.get('/',
       if (is_read !== undefined) {
         where.is_read = is_read === 'true';
       }
-      if (type) {
+      // type 和 exclude_type 不能同时使用，exclude_type 优先级更高
+      if (exclude_type) {
+        where.type = { [Op.ne]: exclude_type };
+      } else if (type) {
         where.type = type;
       }
 

@@ -10,6 +10,7 @@ const {
   CourseOffering
 } = require('../models');
 const { authenticateToken, requireAdmin, optionalAuthenticateToken } = require('../middleware/auth');
+const { createNotification } = require('../utils/notificationHelper');
 
 const router = express.Router();
 
@@ -362,6 +363,19 @@ router.post('/:id/reactions',
         stat.net_score = stat.like_count - stat.dislike_count;
         stat.last_reacted_at = now;
         await stat.save();
+        
+        // 通知课评作者（如果不是自己给自己点赞/踩）
+        if (review.author_id !== userId && incoming === 'like') {
+          await createNotification({
+            user_id: review.author_id,
+            type: 'review',
+            title: '你的课评被点赞了',
+            content: '你的课程评价收到了一条点赞',
+            entity_type: 'review',
+            entity_id: reviewId
+          });
+        }
+        
         return res.status(201).json({ status: 'success', message: 'Reaction added', data: { reaction: incoming, stats: stat } });
       }
 
@@ -388,6 +402,19 @@ router.post('/:id/reactions',
         stat.net_score = stat.like_count - stat.dislike_count;
         stat.last_reacted_at = now;
         await stat.save();
+        
+        // 通知课评作者（如果不是自己给自己点赞/踩，且从dislike切换到like）
+        if (review.author_id !== userId && prev === 'dislike' && incoming === 'like') {
+          await createNotification({
+            user_id: review.author_id,
+            type: 'review',
+            title: '你的课评被点赞了',
+            content: '你的课程评价收到了一条点赞',
+            entity_type: 'review',
+            entity_id: reviewId
+          });
+        }
+        
         return res.json({ status: 'success', message: 'Reaction updated', data: { reaction: incoming, stats: stat } });
       }
     } catch (error) {

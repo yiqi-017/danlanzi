@@ -33,6 +33,10 @@ router.post('/register', async (req, res) => {
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
+    // 检查是否是第一个用户，如果是则自动设置为管理员
+    const userCount = await User.count();
+    const userRole = userCount === 0 ? 'admin' : 'user';
+
     // 创建用户
     const newUser = await User.create({
       nickname: nickname,
@@ -40,7 +44,7 @@ router.post('/register', async (req, res) => {
       student_id: studentIdFromEmail,
       password_hash: passwordHash,
       security_email: email, // 自动将安全邮箱设置为注册邮箱
-      role: 'user',
+      role: userRole,
       status: 'active',
       theme: 'dark',
       language: 'zh-CN',

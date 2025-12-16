@@ -9,6 +9,7 @@ const {
 } = require('../models');
 const { authenticateToken, optionalAuthenticateToken } = require('../middleware/auth');
 const { Op } = require('sequelize');
+const { createNotification } = require('../utils/notificationHelper');
 
 const router = express.Router();
 
@@ -163,6 +164,18 @@ router.post('/',
 
       await ensureCommentStatExists(comment.id);
 
+      // 通知课评作者（如果不是自己评论自己的课评）
+      if (review.author_id !== userId) {
+        await createNotification({
+          user_id: review.author_id,
+          type: 'review',
+          title: '你的课评收到新回复',
+          content: '你的课程评价收到了一条新回复',
+          entity_type: 'review',
+          entity_id: review_id
+        });
+      }
+
       return res.status(201).json({ status: 'success', message: 'Comment created successfully', data: { comment } });
     } catch (error) {
       console.error('创建评价评论失败:', error);
@@ -265,6 +278,19 @@ router.post('/:id/reactions',
         stat.net_score = stat.like_count - stat.dislike_count;
         stat.last_reacted_at = now;
         await stat.save();
+        
+        // 通知评论作者（如果不是自己给自己点赞/踩）
+        if (comment.user_id !== userId && incoming === 'like') {
+          await createNotification({
+            user_id: comment.user_id,
+            type: 'comment',
+            title: '你的评论被点赞了',
+            content: '你的课评回复收到了一条点赞',
+            entity_type: 'review_comment',
+            entity_id: commentId
+          });
+        }
+        
         return res.status(201).json({ status: 'success', message: 'Reaction added', data: { reaction: incoming, stats: stat } });
       }
 
@@ -286,6 +312,19 @@ router.post('/:id/reactions',
         stat.net_score = stat.like_count - stat.dislike_count;
         stat.last_reacted_at = now;
         await stat.save();
+        
+        // 通知评论作者（如果不是自己给自己点赞/踩，且从dislike切换到like）
+        if (comment.user_id !== userId && prev === 'dislike' && incoming === 'like') {
+          await createNotification({
+            user_id: comment.user_id,
+            type: 'comment',
+            title: '你的评论被点赞了',
+            content: '你的课评回复收到了一条点赞',
+            entity_type: 'review_comment',
+            entity_id: commentId
+          });
+        }
+        
         return res.json({ status: 'success', message: 'Reaction updated', data: { reaction: incoming, stats: stat } });
       }
     } catch (error) {
