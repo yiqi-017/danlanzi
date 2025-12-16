@@ -23,6 +23,9 @@ const ReviewReaction = require('./ReviewReaction');
 const ReviewCommentReaction = require('./ReviewCommentReaction');
 const ReviewStat = require('./ReviewStat');
 const ReviewCommentStat = require('./ReviewCommentStat');
+const ResourceComment = require('./ResourceComment');
+const ResourceCommentStat = require('./ResourceCommentStat');
+const ResourceCommentReaction = require('./ResourceCommentReaction');
 
 // 用户关联
 User.hasMany(Enrollment, { foreignKey: 'user_id', as: 'enrollments' });
@@ -38,6 +41,8 @@ User.hasMany(ModerationQueue, { foreignKey: 'handled_by', as: 'moderationActions
 User.hasMany(File, { foreignKey: 'uploader_id', as: 'uploadedFiles' });
 User.hasMany(ReviewReaction, { foreignKey: 'user_id', as: 'reviewReactions' });
 User.hasMany(ReviewCommentReaction, { foreignKey: 'user_id', as: 'reviewCommentReactions' });
+User.hasMany(ResourceComment, { foreignKey: 'user_id', as: 'resourceComments' });
+User.hasMany(ResourceCommentReaction, { foreignKey: 'user_id', as: 'resourceCommentReactions' });
 
 // 课程关联
 Course.hasMany(CourseOffering, { foreignKey: 'course_id', as: 'offerings' });
@@ -58,6 +63,7 @@ Resource.hasMany(ResourceCourseLink, { foreignKey: 'resource_id', as: 'courseLin
 Resource.hasMany(ResourceFavorite, { foreignKey: 'resource_id', as: 'favorites' });
 Resource.hasOne(ResourceStat, { foreignKey: 'resource_id', as: 'stats' });
 Resource.hasMany(ResourceLike, { foreignKey: 'resource_id', as: 'likes' });
+Resource.hasMany(ResourceComment, { foreignKey: 'resource_id', as: 'comments' });
 ResourceLike.belongsTo(Resource, { foreignKey: 'resource_id', as: 'resource' });
 ResourceLike.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
@@ -90,6 +96,16 @@ ReviewStat.belongsTo(CourseReview, { foreignKey: 'review_id', as: 'review' });
 ReviewCommentReaction.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 ReviewCommentReaction.belongsTo(ReviewComment, { foreignKey: 'comment_id', as: 'comment' });
 ReviewCommentStat.belongsTo(ReviewComment, { foreignKey: 'comment_id', as: 'comment' });
+
+// 资源评论关联
+ResourceComment.belongsTo(Resource, { foreignKey: 'resource_id', as: 'resource' });
+ResourceComment.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+ResourceComment.hasMany(ResourceCommentReaction, { foreignKey: 'comment_id', as: 'reactions' });
+ResourceComment.hasOne(ResourceCommentStat, { foreignKey: 'comment_id', as: 'stats' });
+
+ResourceCommentReaction.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+ResourceCommentReaction.belongsTo(ResourceComment, { foreignKey: 'comment_id', as: 'comment' });
+ResourceCommentStat.belongsTo(ResourceComment, { foreignKey: 'comment_id', as: 'comment' });
 
 // 通知关联
 Notification.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -131,5 +147,8 @@ module.exports = {
   ReviewReaction,
   ReviewCommentReaction,
   ReviewStat,
-  ReviewCommentStat
+  ReviewCommentStat,
+  ResourceComment,
+  ResourceCommentStat,
+  ResourceCommentReaction
 };

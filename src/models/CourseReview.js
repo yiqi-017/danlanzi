@@ -36,7 +36,7 @@ const CourseReview = sequelize.define('CourseReview', {
     allowNull: true,
     validate: {
       min: 1,
-      max: 5
+      max: 10
     }
   },
   rating_difficulty: {
@@ -44,7 +44,7 @@ const CourseReview = sequelize.define('CourseReview', {
     allowNull: true,
     validate: {
       min: 1,
-      max: 5
+      max: 10
     }
   },
   rating_workload: {
@@ -52,7 +52,7 @@ const CourseReview = sequelize.define('CourseReview', {
     allowNull: true,
     validate: {
       min: 1,
-      max: 5
+      max: 10
     }
   },
   rating_teaching: {
@@ -60,7 +60,7 @@ const CourseReview = sequelize.define('CourseReview', {
     allowNull: true,
     validate: {
       min: 1,
-      max: 5
+      max: 10
     }
   },
   title: {

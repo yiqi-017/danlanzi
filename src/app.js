@@ -16,6 +16,7 @@ const detectRoutes = require('./routes/detect');
 const announcementRoutes = require('./routes/announcement');
 const reviewsRoutes = require('./routes/reviews');
 const reviewCommentsRoutes = require('./routes/reviewComments');
+const resourceCommentsRoutes = require('./routes/resourceComments');
 const moderationRoutes = require('./routes/moderation');
 
 const app = express();
@@ -44,6 +45,7 @@ app.use('/api/detect', detectRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/reviews', reviewsRoutes);
 app.use('/api/reviewComments', reviewCommentsRoutes);
+app.use('/api/resourceComments', resourceCommentsRoutes);
 app.use('/api/moderation', moderationRoutes);
 app.get('/health', (req, res) => {
   res.json({
